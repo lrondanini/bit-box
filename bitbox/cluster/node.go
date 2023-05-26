@@ -98,13 +98,18 @@ func (n *Node) Shutdown() {
 }
 
 func (n *Node) StartHeartbit() {
-	fmt.Println("Starting heartbit...")
+	fmt.Print("Starting heartbit...")
 	if !n.heartbitManager.started && len(n.clusterManager.servers) > 1 {
 		n.heartbitManager.JoinCluster(n.clusterManager.partitionTable.Timestamp)
 		if n.heartbitManager.started {
 			go n.manageHeartbitEvents()
 		}
+	} else {
+		n.heartbitManager.SetPartitionTableTimestamp(n.clusterManager.partitionTable.Timestamp)
+		n.heartbitManager.UpdateHardwareStats()
+
 	}
+	fmt.Println("DONE")
 }
 
 func (n *Node) GetHeartbitStatus() []server.Server {

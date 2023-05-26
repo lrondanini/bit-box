@@ -198,6 +198,7 @@ func (cm *ClusterManager) BootstrapNewNode() error {
 			return err
 		}
 		fmt.Println("DONE")
+		cm.currentNode.StartHeartbit()
 		cm.currentServerStatus = serverStatus.Alive
 	}
 

@@ -13,6 +13,7 @@ type Configuration struct {
 	LOG_FILE_MAX_SIZE        int
 	LOG_FILE_MAX_NUM_BACKUPS int
 	LOG_FILE_MAX_AGE         int
+	LOG_GOSSIP_PROTOCOL      bool
 
 	NODE_IP            string
 	NODE_PORT          string

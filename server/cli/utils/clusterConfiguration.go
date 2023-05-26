@@ -42,6 +42,10 @@ func SetConfFile(confFilePath string) {
 
 	fileName := strings.ReplaceAll(tmpFileName, ext, "")
 
+	if !filepath.IsAbs(confFilePath) {
+		locationPath = filepath.Join(os.Getenv("PWD"), locationPath)
+	}
+
 	once.Do(func() {
 		instance = initClusterConfiguration(fileName, clusterConfigFileType, []string{locationPath})
 	})
@@ -61,7 +65,7 @@ func initClusterConfiguration(fileName string, fileType string, paths []string) 
 	viper.SetConfigType(fileType)
 
 	// call multiple times to add many search paths
-	for _, p := range configPaths {
+	for _, p := range paths {
 		viper.AddConfigPath(p)
 	}
 
@@ -83,6 +87,7 @@ func initClusterConfiguration(fileName string, fileType string, paths []string) 
 		LOG_FILE_MAX_SIZE:          viper.GetInt("logMaxSize"),
 		LOG_FILE_MAX_NUM_BACKUPS:   viper.GetInt("logMaxBackups"),
 		LOG_FILE_MAX_AGE:           viper.GetInt("logMaxAge"),
+		LOG_GOSSIP_PROTOCOL:        viper.GetBool("logGossipProtocol"),
 		NODE_IP:                    viper.GetString("nodeIp"),
 		NODE_PORT:                  viper.GetString("nodePort"),
 		NODE_HEARTBIT_PORT:         viper.GetString("nodeHeartbitPort"),
@@ -122,6 +127,5 @@ func initClusterConfiguration(fileName string, fileType string, paths []string) 
 		panic("Configuration errors")
 	}
 
-	fmt.Println(conf)
 	return conf
 }

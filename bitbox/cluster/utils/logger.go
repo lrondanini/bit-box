@@ -119,10 +119,18 @@ func newRollingFile(conf *Configuration) io.Writer {
 /*
 * Used to intercept and log logs from serf
  */
-type SerfLogWriter struct{}
+type SerfLogWriter struct {
+	Skip bool
+}
 
 func (mw *SerfLogWriter) Write(line []byte) (n int, err error) {
+	if mw.Skip {
+		return len(line), nil
+	}
+
 	str := string(line)
+
+	//fmt.Println(str)
 
 	tmp := strings.Split(str, ":")
 
@@ -131,7 +139,7 @@ func (mw *SerfLogWriter) Write(line []byte) (n int, err error) {
 		str = ""
 		goMsg := false
 		for i := 0; i < len(tmp); i++ {
-			if strings.Contains(tmp[i], "agent") || strings.Contains(tmp[i], "serf") {
+			if strings.Contains(tmp[i], "agent") || strings.Contains(tmp[i], "serf") || strings.Contains(tmp[i], "memberlist") || strings.Contains(tmp[i], "event") || strings.Contains(tmp[i], "query") {
 				goMsg = true
 				levelString = tmp[i]
 			} else if goMsg {

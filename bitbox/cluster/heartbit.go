@@ -33,11 +33,11 @@ func InitHeartbitManager(nodeId string, port string) *HeartbitManager {
 		panic(err)
 	}
 
-	// nullLogger := log.New(ioutil.Discard, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	// conf.Logger = nullLogger
-	// conf.MemberlistConfig.Logger = conf.Logger
+	var clusterConfig = utils.GetClusterConfiguration()
 
-	serfLogger := &utils.SerfLogWriter{}
+	serfLogger := &utils.SerfLogWriter{
+		Skip: !clusterConfig.LOG_GOSSIP_PROTOCOL,
+	}
 	conf.LogOutput = serfLogger
 	conf.MemberlistConfig.LogOutput = serfLogger
 
@@ -92,11 +92,15 @@ func (h *HeartbitManager) JoinCluster(partitionTableTimestamp int64) {
 }
 
 func (h *HeartbitManager) SetPartitionTableTimestamp(partitionTableTimestamp int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.tags["ptTimestamp"] = strconv.FormatInt(partitionTableTimestamp, 10)
 	h.setTags()
 }
 
 func (h *HeartbitManager) UpdateHardwareStats() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	stats := utils.GetHardwareStats()
 	h.tags["memory"] = stats.Memory
 	h.tags["cpu"] = stats.CPU
@@ -105,8 +109,6 @@ func (h *HeartbitManager) UpdateHardwareStats() {
 
 func (h *HeartbitManager) setTags() {
 	logger := utils.GetLogger()
-	h.mu.Lock()
-	defer h.mu.Unlock()
 	err := h.serf.SetTags(h.tags)
 	if err != nil {
 		logger.Error().Msg("Cannot set partition table timestamp for heartbit: " + err.Error())
