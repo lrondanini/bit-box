@@ -64,6 +64,8 @@ func (n *Node) Start(ctx context.Context, signalChan chan os.Signal, forceRejoin
 		return err
 	}
 
+	fmt.Println("Node started successfully")
+
 	for {
 		select {
 		case <-ctx.Done():

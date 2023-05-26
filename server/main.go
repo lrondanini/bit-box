@@ -1,19 +1,15 @@
 package main
 
 import (
-	"context"
 	"flag"
-	"fmt"
 	"os"
-	"os/signal"
 
+	"github.com/lrondanini/bit-box/bitbox"
 	"github.com/lrondanini/bit-box/server/cli"
 	cliUtils "github.com/lrondanini/bit-box/server/cli/utils"
-
-	"github.com/lrondanini/bit-box/bitbox/cluster"
 )
 
-var node *cluster.Node
+var bitBox *bitbox.BitBox
 
 var cliMode = false
 var cliConfFile = ""
@@ -70,12 +66,12 @@ func init() {
 	cliMode, cliConfFile, forceRejoin = parseCommandLineParameters()
 
 	if !cliMode {
-		n, err := cluster.InitNode(*cliUtils.GetClusterConfiguration())
+		bb, err := bitbox.Init(*cliUtils.GetClusterConfiguration())
 		if err != nil {
 			panic(err)
 		}
 
-		node = n
+		bitBox = bb
 	}
 }
 
@@ -83,34 +79,6 @@ func main() {
 	if cliMode {
 		cli.Start(cliConfFile)
 	} else {
-
-		ctx := context.Background()
-		ctx, cancel := context.WithCancel(ctx)
-		signalChan := make(chan os.Signal, 1)
-		signal.Notify(signalChan, os.Interrupt)
-		defer func() {
-			signal.Stop(signalChan)
-			cancel()
-		}()
-
-		go func() {
-			select {
-			case <-signalChan: // first signal, cancel context
-				fmt.Println("\n\nGracefully shutting down")
-				cancel()
-			case <-ctx.Done():
-			}
-			<-signalChan // second signal, hard exit
-			os.Exit(2)
-		}()
-
-		if err := run(ctx, signalChan); err != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", err)
-			os.Exit(1)
-		}
+		bitBox.Start(forceRejoin)
 	}
-}
-
-func run(ctx context.Context, signalChan chan os.Signal) error {
-	return node.Start(ctx, signalChan, forceRejoin)
 }

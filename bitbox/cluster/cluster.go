@@ -62,9 +62,7 @@ func InitClusterManager(currentNode *Node) (*ClusterManager, error) {
 
 	clusterManager.servers = server.InitServerList(&clusterManager.partitionTable)
 
-	partitioner.PrintVnodes(clusterManager.partitionTable.VNodes)
-	fmt.Println("Timestamp:", clusterManager.partitionTable.Timestamp)
-	fmt.Println("ServerList:", clusterManager.servers)
+	fmt.Println("Current Partition Table:", clusterManager.partitionTable.Timestamp)
 
 	clusterManager.topologyManager = InitTopologyManager(&clusterManager)
 	return &clusterManager, nil
