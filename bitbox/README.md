@@ -1,0 +1,1 @@
+# bitbox core to be used as simple go module
