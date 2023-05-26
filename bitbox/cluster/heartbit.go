@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/lrondanini/bit-box/bitbox/cluster/server"
@@ -17,6 +18,7 @@ type HeartbitManager struct {
 	eventChannel chan serf.Event
 	started      bool
 	tags         map[string]string
+	mu           sync.Mutex
 }
 
 func InitHeartbitManager(nodeId string, port string) *HeartbitManager {
@@ -103,6 +105,8 @@ func (h *HeartbitManager) UpdateHardwareStats() {
 
 func (h *HeartbitManager) setTags() {
 	logger := utils.GetLogger()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	err := h.serf.SetTags(h.tags)
 	if err != nil {
 		logger.Error().Msg("Cannot set partition table timestamp for heartbit: " + err.Error())

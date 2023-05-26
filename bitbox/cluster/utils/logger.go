@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -56,6 +57,27 @@ func Configure(conf *Configuration) *Logger {
 		zerolog.SetGlobalLevel(zerolog.PanicLevel)
 	}
 
+	zerolog.CallerMarshalFunc = func(pc uintptr, file string, line int) string {
+		short := ""
+		tmp := strings.Split(file, "/")
+		counter := 0
+		for i := len(tmp) - 1; i > 0; i-- {
+			counter++
+			if counter > 3 {
+				short = "..../" + tmp[i] + "/" + short
+				break
+			}
+			if short == "" {
+				short = tmp[i]
+			} else {
+				short = tmp[i] + "/" + short
+			}
+
+		}
+		file = short
+		return file + ":" + strconv.Itoa(line)
+	}
+
 	logger := zerolog.New(mw).With().Timestamp().Caller().Logger()
 
 	return &Logger{
@@ -97,11 +119,9 @@ func newRollingFile(conf *Configuration) io.Writer {
 /*
 * Used to intercept and log logs from serf
  */
-type SerfLogWriter struct {
-}
+type SerfLogWriter struct{}
 
 func (mw *SerfLogWriter) Write(line []byte) (n int, err error) {
-
 	str := string(line)
 
 	tmp := strings.Split(str, ":")
@@ -111,25 +131,30 @@ func (mw *SerfLogWriter) Write(line []byte) (n int, err error) {
 		str = ""
 		goMsg := false
 		for i := 0; i < len(tmp); i++ {
-			if strings.Contains(tmp[i], "agent") {
+			if strings.Contains(tmp[i], "agent") || strings.Contains(tmp[i], "serf") {
 				goMsg = true
 				levelString = tmp[i]
 			} else if goMsg {
-				str += tmp[i]
+				if str == "" {
+					str += strings.Trim(tmp[i], "\n")
+				} else {
+					str += ": " + strings.Trim(tmp[i], "\n")
+				}
+
 			}
 		}
 	}
 
 	if strings.Contains(levelString, "INFO") {
-		logInstance.Info().Str("FROM", "SERF-PROTOCOL").Msg(str)
+		logInstance.Info().Str("LIB", "SERF").Msg(str)
 	} else if strings.Contains(levelString, "WARN") {
-		logInstance.Warn().Str("FROM", "SERF-PROTOCOL").Msg(str)
+		logInstance.Warn().Str("LIB", "SERF").Msg(str)
 	} else if strings.Contains(levelString, "ERR") {
-		logInstance.Error().Str("FROM", "SERF-PROTOCOL").Msg(str)
+		logInstance.Error().Str("LIB", "SERF").Msg(str)
 	} else if strings.Contains(levelString, "DEBUG") {
-		logInstance.Debug().Str("FROM", "SERF-PROTOCOL").Msg(str)
+		logInstance.Debug().Str("LIB", "SERF").Msg(str)
 	} else {
-		logInstance.Error().Str("FROM", "SERF-PROTOCOL").Msg(str)
+		logInstance.Error().Str("LIB", "SERF").Msg(str)
 	}
 
 	return len(line), nil

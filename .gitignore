@@ -8,6 +8,7 @@
 
 *.out
 
-
-data/
+# bit-box server folders
+data
+logs
 .bit-box-cli-history

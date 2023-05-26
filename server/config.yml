@@ -1,0 +1,37 @@
+#***************************************
+#   NODE CONFIGURATION
+#***************************************
+nodeIp: localhost
+nodePort: 3456
+
+#port used for UDP heartbit connections
+nodeHeartbitPort: 3457 
+
+#where to store noed's data
+dataFolder: ./data
+
+#***************************************
+#   IP and PORT of any other node in the cluster
+#***************************************
+clusterNodeIp: localhost
+clusterNodePort: 2345
+clusterNodeHeartbitPort: 2346
+
+#***************************************
+#   LOGGING INFOS
+#***************************************
+# LOG_TO: console | file | both
+logTo: console
+# LOG_LEVEL = trace | debug | info | warn | error | fatal | panic 
+# in order of verbosity from trace (max) to panic (min)
+logLevel: debug
+
+# if logTo is file or both:
+logDir: ./logs
+logFile: server.log
+# logMaxSize: the max size in MB of the logfile before it's rolled
+logMaxSize: 500 # megabytes
+# logMaxBackups: the max number of rolled files to keep
+logMaxBackups: 3
+# logMaxAge: the max age in days to keep a logfile
+logMaxAge: 28 #days
