@@ -2,6 +2,7 @@ package communication
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/lrondanini/bit-box/bitbox/actions"
 	"github.com/lrondanini/bit-box/bitbox/cluster/server"
@@ -75,13 +76,14 @@ func (c *CommunicationManager) SendNodeBackOnlineNotification(toNodeId string) (
 	return remoteTimestamp, nil
 }
 
-func (c *CommunicationManager) SendJoinClusterRequest(toNodeId string, nodeId string, nodeIp string, nodePort string) error {
+func (c *CommunicationManager) SendJoinClusterRequest(toNodeId string, nodeId string, nodeIp string, nodePort string, numbOfVNodes int) error {
 
 	body := make(map[string]string)
 
 	body["nodeId"] = nodeId
 	body["nodeIp"] = nodeIp
 	body["nodePort"] = nodePort
+	body["numbOfVNodes"] = strconv.Itoa(numbOfVNodes)
 
 	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.JoinClusterRequest, body)
 

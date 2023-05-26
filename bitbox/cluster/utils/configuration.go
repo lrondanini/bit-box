@@ -23,6 +23,8 @@ type Configuration struct {
 	CLUSTER_NODE_PORT          string
 	CLUSTER_NODE_HEARTBIT_PORT string
 
+	NUMB_VNODES int
+
 	DATA_FOLDER string
 }
 
@@ -62,6 +64,10 @@ func VerifyAndSetConfiguration(conf *Configuration) {
 
 	if conf.LOG_LEVEL == "" {
 		conf.LOG_TO = "info"
+	}
+
+	if conf.NUMB_VNODES == 0 {
+		conf.NUMB_VNODES = 8
 	}
 
 	if len(errors) > 0 {

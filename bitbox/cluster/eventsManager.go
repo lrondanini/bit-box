@@ -121,12 +121,18 @@ func (em *EventsManager) onJoinClusterRequest(f *tcp.Frame, replyToChannel chan 
 	if err != nil {
 		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
 	} else {
-		err = em.clusterManager.StartAddNewNode(f.FromNodeId, req["nodeId"], req["nodeIp"], req["nodePort"])
-		if err != nil {
-			replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not start adding new node: "+err.Error())
+		numbVNode, e := strconv.Atoi(req["numbOfVNodes"])
+		if e != nil {
+			replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse numbOfVNodes: "+err.Error())
 		} else {
-			replyToChannel <- *em.ackFrame
+			err = em.clusterManager.StartAddNewNode(f.FromNodeId, req["nodeId"], req["nodeIp"], req["nodePort"], numbVNode)
+			if err != nil {
+				replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not start adding new node: "+err.Error())
+			} else {
+				replyToChannel <- *em.ackFrame
+			}
 		}
+
 	}
 }
 

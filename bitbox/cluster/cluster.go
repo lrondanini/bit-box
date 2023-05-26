@@ -190,7 +190,7 @@ func (cm *ClusterManager) BootstrapNewNode() error {
 		fmt.Print("Initialing new cluster...")
 
 		//creating a brand new partition table
-		vnodes := partitioner.GeneratePartitionTable(1, cm.currentNode.GetId(), cm.currentNode.NodeIp, cm.currentNode.NodePort)
+		vnodes := partitioner.GenerateNewPartitionTable(conf.NUMB_VNODES, cm.currentNode.GetId(), cm.currentNode.NodeIp, cm.currentNode.NodePort)
 		err := cm.updatePartitionTable(partitioner.InitPartitionTable(*vnodes, time.Now().UnixMicro()))
 		if err != nil {
 			return err
@@ -209,7 +209,7 @@ func (cm *ClusterManager) JoinClusterAsNewNode() error {
 	//contact the other cluster node asking to join
 	fmt.Print("Send join cluster request...")
 
-	err := cm.commManager.SendJoinClusterRequest(GenerateNodeId(conf.CLUSTER_NODE_IP, conf.CLUSTER_NODE_PORT), cm.currentNode.GetId(), cm.currentNode.NodeIp, cm.currentNode.NodePort)
+	err := cm.commManager.SendJoinClusterRequest(GenerateNodeId(conf.CLUSTER_NODE_IP, conf.CLUSTER_NODE_PORT), cm.currentNode.GetId(), cm.currentNode.NodeIp, cm.currentNode.NodePort, conf.NUMB_VNODES)
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,7 @@ func (cm *ClusterManager) updatePartitionTable(pt *partitioner.PartitionTable) e
 	return nil
 }
 
-func (cm *ClusterManager) StartAddNewNode(reqFromNodeId string, newNodeId string, newNodeIp string, newNodePort string) error {
+func (cm *ClusterManager) StartAddNewNode(reqFromNodeId string, newNodeId string, newNodeIp string, newNodePort string, numberOfVNodes int) error {
 
 	//verify that newNodeId is not already in our cluster
 	if _, ok := cm.servers[newNodeId]; ok {
@@ -247,7 +247,7 @@ func (cm *ClusterManager) StartAddNewNode(reqFromNodeId string, newNodeId string
 		return errors.New(cm.currentNode.GetId() + " cannot process your request, node is " + cm.currentServerStatus.String())
 	}
 
-	cm.topologyManager.StartAddNewNode(reqFromNodeId, newNodeId, newNodeIp, newNodePort)
+	cm.topologyManager.StartAddNewNode(reqFromNodeId, newNodeId, newNodeIp, newNodePort, numberOfVNodes)
 	return nil
 }
 

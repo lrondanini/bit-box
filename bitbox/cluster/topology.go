@@ -47,7 +47,7 @@ func InitTopologyManager(clusterManager *ClusterManager) *TopologyManager {
 	return &topologyManager
 }
 
-func (tm *TopologyManager) StartAddNewNode(reqFromNodeId string, newNodeId string, newNodeIp string, newNodePort string) {
+func (tm *TopologyManager) StartAddNewNode(reqFromNodeId string, newNodeId string, newNodeIp string, newNodePort string, numberOfVNodes int) {
 	tm.configurationLock.Lock()
 	if reqFromNodeId == "" {
 		tm.requestsRouter[newNodeId] = newNodeId
@@ -57,10 +57,11 @@ func (tm *TopologyManager) StartAddNewNode(reqFromNodeId string, newNodeId strin
 	tm.configurationLock.Unlock()
 
 	s := server.Server{
-		NodeId:   newNodeId,
-		NodeIp:   newNodeIp,
-		NodePort: newNodePort,
-		Status:   serverStatus.Joining,
+		NodeId:       newNodeId,
+		NodeIp:       newNodeIp,
+		NodePort:     newNodePort,
+		Status:       serverStatus.Joining,
+		NumbOfVNodes: numberOfVNodes,
 	}
 
 	tm.logger.Info().Msg("New node requested to join cluster:" + newNodeId + " (" + newNodeIp + ":" + newNodePort + ")")
@@ -282,12 +283,26 @@ func (tm *TopologyManager) SetNewClusterMaster(fromNodeId string) (bool, int64) 
 }
 
 func (tm *TopologyManager) calculateAndSubmitPartitionTable(s server.Server, currentVNodes []partitioner.VNode) {
+	abort := false
+
 	if s.Status == serverStatus.Joining {
-		newVNodes := partitioner.AddNode(&currentVNodes, s.NodeId, s.NodeIp, s.NodePort)
-		tm.configurationLock.Lock()
-		tm.tempPartitionTable = *partitioner.InitPartitionTable(*newVNodes, time.Now().UnixMicro()+int64(rand.Intn(1000)))
-		tm.configurationLock.Unlock()
-		tm.logger.Info().Msg("Start adding:" + s.NodeId + " (" + s.NodeIp + ":" + s.NodePort + ") - New partition table:" + strconv.FormatInt(tm.tempPartitionTable.Timestamp, 10))
+		newVNodes, err := partitioner.AddNode(&currentVNodes, s.NumbOfVNodes, s.NodeId, s.NodeIp, s.NodePort)
+		if err != nil {
+			//abort the process and send a message to the requestor saying that the process could not be completed
+			abortMessage := "Could not create partition table for " + s.NodeId + "(" + s.NodeIp + ":" + s.NodePort + "): " + err.Error()
+			tm.logger.Error().Err(err).Msg("Could not create partition table for " + s.NodeId + "(" + s.NodeIp + ":" + s.NodePort + ")")
+			tm.configurationLock.Lock()
+			sendTo := tm.requestsRouter[s.NodeId]
+			tm.configurationLock.Unlock()
+			tm.clusterManager.commManager.SendAbortPartitionTableChangesToRequestor(sendTo, abortMessage)
+			abort = true
+		} else {
+			tm.configurationLock.Lock()
+			tm.tempPartitionTable = *partitioner.InitPartitionTable(*newVNodes, time.Now().UnixMicro()+int64(rand.Intn(1000)))
+			tm.configurationLock.Unlock()
+			tm.logger.Info().Msg("Start adding:" + s.NodeId + " (" + s.NodeIp + ":" + s.NodePort + ") - New partition table:" + strconv.FormatInt(tm.tempPartitionTable.Timestamp, 10))
+		}
+
 	} else if s.Status == serverStatus.Decommissioning {
 		newVNodes := partitioner.RemoveNode(&currentVNodes, s.NodeId)
 		tm.configurationLock.Lock()
@@ -295,49 +310,52 @@ func (tm *TopologyManager) calculateAndSubmitPartitionTable(s server.Server, cur
 		tm.configurationLock.Unlock()
 		tm.logger.Info().Msg("Start removing:" + s.NodeId + " (" + s.NodeIp + ":" + s.NodePort + ") - New partition table:" + strconv.FormatInt(tm.tempPartitionTable.Timestamp, 10))
 	}
-	newServerList := server.InitServerList(&tm.tempPartitionTable)
 
-	abort := false
-	for _, server := range newServerList {
-		if server.NodeId != tm.clusterManager.currentNode.GetId() {
-			//send the new partition table to the server
-			tm.configurationLock.Lock()
-			tm.logger.Info().Msg("Sending partition table " + strconv.FormatInt(tm.tempPartitionTable.Timestamp, 10) + " to " + server.NodeId)
-			err := tm.clusterManager.commManager.SendUpdatePartitionTableRequest(server.NodeId, &tm.tempPartitionTable)
-			tm.configurationLock.Unlock()
-			if err != nil {
-				tm.logger.Error().Msg("Could not send new partition table to " + server.NodeId + "(" + server.NodeIp + ":" + server.NodePort + "): " + err.Error())
+	if !abort {
+		newServerList := server.InitServerList(&tm.tempPartitionTable)
 
-				//abort the process and send a message to the requestor saying that the process could not be completed
-				abortMessage := "Could not send new partition table to " + server.NodeId + "(" + server.NodeIp + ":" + server.NodePort + "): " + err.Error()
+		for _, server := range newServerList {
+			if server.NodeId != tm.clusterManager.currentNode.GetId() {
+				//send the new partition table to the server
 				tm.configurationLock.Lock()
-				sendTo := tm.requestsRouter[s.NodeId]
+				tm.logger.Info().Msg("Sending partition table " + strconv.FormatInt(tm.tempPartitionTable.Timestamp, 10) + " to " + server.NodeId)
+				err := tm.clusterManager.commManager.SendUpdatePartitionTableRequest(server.NodeId, &tm.tempPartitionTable)
 				tm.configurationLock.Unlock()
-				tm.clusterManager.commManager.SendAbortPartitionTableChangesToRequestor(sendTo, abortMessage)
-				abort = true
-				break
+				if err != nil {
+					tm.logger.Error().Msg("Could not send new partition table to " + server.NodeId + "(" + server.NodeIp + ":" + server.NodePort + "): " + err.Error())
+
+					//abort the process and send a message to the requestor saying that the process could not be completed
+					abortMessage := "Could not send new partition table to " + server.NodeId + "(" + server.NodeIp + ":" + server.NodePort + "): " + err.Error()
+					tm.configurationLock.Lock()
+					sendTo := tm.requestsRouter[s.NodeId]
+					tm.configurationLock.Unlock()
+					tm.clusterManager.commManager.SendAbortPartitionTableChangesToRequestor(sendTo, abortMessage)
+					abort = true
+					break
+				}
 			}
+		}
+
+		if !abort {
+			//save locally
+			err := tm.clusterManager.updatePartitionTable(&tm.tempPartitionTable)
+			if err != nil {
+				//do not return any error to the cluster, its a problem with this node
+
+				tm.logger.Error().Msg("Error committing partition table: " + err.Error())
+
+			} else {
+				//notify current node
+				tm.clusterManager.nodeCummunicationChannel <- actions.NewPartitionTable
+			}
+
+			//broadcast commit and release
+			tm.broadcastCommit(newServerList)
 		}
 	}
 
 	if abort {
 		tm.broadcastReleaseMaster(s.NodeId)
-	} else {
-
-		//save locally
-		err := tm.clusterManager.updatePartitionTable(&tm.tempPartitionTable)
-		if err != nil {
-			//do not return any error to the cluster, its a problem with this node
-
-			tm.logger.Error().Msg("Error committing partition table: " + err.Error())
-
-		} else {
-			//notify current node
-			tm.clusterManager.nodeCummunicationChannel <- actions.NewPartitionTable
-		}
-
-		//broadcast commit and release
-		tm.broadcastCommit(newServerList)
 	}
 }
 

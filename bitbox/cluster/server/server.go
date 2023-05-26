@@ -18,6 +18,7 @@ type Server struct {
 	PartitionTable   string                        `json:"partitionTable"`
 	Memory           string                        `json:"memory"` //USED/AVAILABLE/TOTAL
 	CPU              string                        `json:"cpu"`
+	NumbOfVNodes     int                           `json:"numbOfVNodes"` //number of vnodes assigned to this server
 }
 
 func InitServerList(pt *partitioner.PartitionTable) map[string]Server {
@@ -34,6 +35,7 @@ func InitServerList(pt *partitioner.PartitionTable) map[string]Server {
 			PartitionTable:   strconv.FormatInt(pt.Timestamp, 10),
 			Memory:           "",
 			CPU:              "",
+			NumbOfVNodes:     0,
 		}
 	}
 
