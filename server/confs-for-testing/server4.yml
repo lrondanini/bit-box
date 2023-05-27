@@ -7,6 +7,9 @@ nodePort: 4444
 #port used for UDP heartbit connections
 nodeHeartbitPort: 4445 
 
+#number of vnodes assigned to this node
+numberOfVNodes: 8
+
 #where to store noed's data
 dataFolder: ./data/node3
 

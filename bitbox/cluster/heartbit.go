@@ -71,7 +71,7 @@ func (h *HeartbitManager) JoinCluster(partitionTableTimestamp int64) {
 	var ok = true
 	if conf.CLUSTER_NODE_IP == "" || conf.CLUSTER_NODE_HEARTBIT_PORT == "" {
 		ok = false
-		logger.Error().Msg("Cannot start heartbit, please verify configuration for clusterNodeIp, clusterNodePort, clusterNodeHeartbitPort and restart this node")
+		logger.Error(nil, "Cannot start heartbit, please verify configuration for clusterNodeIp, clusterNodePort, clusterNodeHeartbitPort and restart this node")
 	}
 
 	if ok {
@@ -79,7 +79,7 @@ func (h *HeartbitManager) JoinCluster(partitionTableTimestamp int64) {
 		_, err := h.serf.Join([]string{conf.CLUSTER_NODE_IP + ":" + conf.CLUSTER_NODE_HEARTBIT_PORT}, false)
 
 		if err != nil {
-			logger.Error().Msg("Cannot start heartbit: " + err.Error())
+			logger.Error(err, "Cannot start heartbit")
 		}
 
 		h.SetPartitionTableTimestamp(partitionTableTimestamp)
@@ -111,7 +111,7 @@ func (h *HeartbitManager) setTags() {
 	logger := utils.GetLogger()
 	err := h.serf.SetTags(h.tags)
 	if err != nil {
-		logger.Error().Msg("Cannot set partition table timestamp for heartbit: " + err.Error())
+		logger.Error(err, "Cannot set partition table timestamp for heartbit")
 	}
 }
 

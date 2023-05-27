@@ -19,7 +19,7 @@ type Node struct {
 	NodePort        string
 	clusterManager  *ClusterManager
 	heartbitManager *HeartbitManager
-	logger          *utils.Logger
+	logger          *utils.InternalLogger
 }
 
 func GenerateNodeId(nodeIp string, nodePort string) string {
@@ -117,7 +117,7 @@ func (n *Node) GetHeartbitStatus() []server.Server {
 
 func (n *Node) onNewPartitionTable() {
 	n.StartHeartbit()
-	n.logger.Info().Msg("New partition table received: " + strconv.FormatInt(n.clusterManager.partitionTable.Timestamp, 10))
+	n.logger.Info("New partition table received: " + strconv.FormatInt(n.clusterManager.partitionTable.Timestamp, 10))
 	n.heartbitManager.SetPartitionTableTimestamp(n.clusterManager.partitionTable.Timestamp)
 }
 

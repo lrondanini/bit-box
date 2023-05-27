@@ -358,7 +358,7 @@ func (cli *CLI) PrintPartitionTable() {
 
 	t := table.NewWriter()
 
-	t.AppendHeader(table.Row{"Node Id", "", "Start Token", "End Token"})
+	t.AppendHeader(table.Row{"Node Id", "", "Start Token", "End Token", "REPLICATED TO"})
 
 	var ordered = make(map[string][]partitioner.VNode)
 	for _, v := range pt.VNodes {
@@ -377,12 +377,23 @@ func (cli *CLI) PrintPartitionTable() {
 		f := true
 		counter := 1
 		for i := 0; i < len(tokens); i++ {
+
 			v := tokens[i]
+
+			replicationList := ""
+			for _, sn := range v.ReplicatedTo {
+				if replicationList != "" {
+					replicationList += ", " + sn
+				} else {
+					replicationList = sn
+				}
+			}
+
 			if f {
-				t.AppendRow(table.Row{nodeId, counter, v.StartToken, v.EndToken})
+				t.AppendRow(table.Row{nodeId, counter, v.StartToken, v.EndToken, replicationList})
 				f = false
 			} else {
-				t.AppendRow(table.Row{"", counter, v.StartToken, v.EndToken})
+				t.AppendRow(table.Row{"", counter, v.StartToken, v.EndToken, replicationList})
 			}
 			counter++
 		}

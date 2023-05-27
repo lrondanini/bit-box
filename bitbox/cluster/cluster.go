@@ -28,7 +28,7 @@ type ClusterManager struct {
 	servers                  map[string]server.Server
 	currentServerStatus      serverStatus.ServerStatus
 
-	logger *utils.Logger
+	logger *utils.InternalLogger
 
 	topologyManager *TopologyManager
 }
@@ -271,7 +271,7 @@ func (cm *ClusterManager) manageUpdatePartitionTableRequest(newPartitionTable *p
 
 func (cm *ClusterManager) manageAbortPartitionTableChangesRequest(message string) {
 	if cm.currentServerStatus == serverStatus.Joining {
-		cm.logger.Error().Msg(message)
+		cm.logger.Error(nil, message)
 		cm.nodeCummunicationChannel <- actions.Shutdown
 	}
 }

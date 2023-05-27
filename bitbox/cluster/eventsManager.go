@@ -29,7 +29,7 @@ type EventsManager struct {
 	nodeId         string
 	ackFrame       *tcp.Frame //to avoid having to calculate this value every time
 	clusterManager *ClusterManager
-	logger         *utils.Logger
+	logger         *utils.InternalLogger
 }
 
 func initEventsManager(nodeId string, clusterManager *ClusterManager) *EventsManager {
@@ -101,14 +101,14 @@ func (em *EventsManager) newFrame(action actions.Action, body string) *tcp.Frame
 }
 
 func (em *EventsManager) onPing(f *tcp.Frame, replyToChannel chan tcp.Frame) {
-	em.logger.Info().Msg("Ping from: " + f.FromNodeId)
+	em.logger.Info("Ping from: " + f.FromNodeId)
 	//debug.PrintStack()
 	//fmt.Print("\n\n\n")
 	replyToChannel <- *em.ackFrame
 }
 
 func (em *EventsManager) onNodeBackOnlineNotification(f *tcp.Frame, replyToChannel chan tcp.Frame) {
-	em.logger.Info().Msg("Node back online: " + f.FromNodeId)
+	em.logger.Info("Node back online: " + f.FromNodeId)
 	resBody, _ := communication.SerialiazeBody(em.clusterManager.partitionTable.Timestamp)
 	replyToChannel <- *em.newFrame(actions.NoAction, resBody)
 }
@@ -180,7 +180,7 @@ func (em *EventsManager) onAbortPartitionTableChanges(f *tcp.Frame, replyToChann
 }
 
 func (em *EventsManager) onGetPartitionTableRequest(f *tcp.Frame, replyToChannel chan tcp.Frame) {
-	em.logger.Info().Msg("Current partition table requested by: " + f.FromNodeId)
+	em.logger.Info("Current partition table requested by: " + f.FromNodeId)
 	resBody, _ := communication.SerialiazeBody(em.clusterManager.partitionTable)
 	replyToChannel <- *em.newFrame(actions.NoAction, resBody)
 }
@@ -192,7 +192,7 @@ func (em *EventsManager) onUpdatePartitionTableRequest(f *tcp.Frame, replyToChan
 	if err != nil {
 		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
 	} else {
-		em.logger.Info().Msg("New partition table from " + f.FromNodeId + " with timestamp " + strconv.FormatInt(reqBody.Timestamp, 10))
+		em.logger.Info("New partition table from " + f.FromNodeId + " with timestamp " + strconv.FormatInt(reqBody.Timestamp, 10))
 		em.clusterManager.manageUpdatePartitionTableRequest(&reqBody)
 		replyToChannel <- *em.ackFrame
 	}

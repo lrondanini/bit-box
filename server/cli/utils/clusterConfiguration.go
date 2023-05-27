@@ -11,7 +11,30 @@ import (
 	"github.com/spf13/viper"
 )
 
-var instance utils.Configuration
+type ClusterConfiguration struct {
+	LOG_LEVEL                string
+	LOG_TO                   string
+	LOG_DIR                  string
+	LOG_FILE_NAME            string
+	LOG_FILE_MAX_SIZE        int
+	LOG_FILE_MAX_NUM_BACKUPS int
+	LOG_FILE_MAX_AGE         int
+	LOG_GOSSIP_PROTOCOL      bool
+
+	NODE_IP            string
+	NODE_PORT          string
+	NODE_HEARTBIT_PORT string
+
+	CLUSTER_NODE_IP            string
+	CLUSTER_NODE_PORT          string
+	CLUSTER_NODE_HEARTBIT_PORT string
+
+	NUMB_VNODES int
+
+	DATA_FOLDER string
+}
+
+var instance ClusterConfiguration
 var once sync.Once
 
 var (
@@ -24,11 +47,33 @@ var (
 	}
 )
 
-func GetClusterConfiguration() *utils.Configuration {
+func GetClusterConfiguration() *ClusterConfiguration {
 	once.Do(func() {
 		instance = initClusterConfiguration(clusterConfigFileName, clusterConfigFileType, clusterConfigPaths)
 	})
 	return &instance
+}
+
+func GetConfigurationForCluster() utils.Configuration {
+	once.Do(func() {
+		instance = initClusterConfiguration(clusterConfigFileName, clusterConfigFileType, clusterConfigPaths)
+	})
+
+	conf := utils.Configuration{
+		LOG_GOSSIP_PROTOCOL:        instance.LOG_GOSSIP_PROTOCOL,
+		NODE_IP:                    instance.NODE_IP,
+		NODE_PORT:                  instance.NODE_PORT,
+		NODE_HEARTBIT_PORT:         instance.NODE_HEARTBIT_PORT,
+		CLUSTER_NODE_IP:            instance.CLUSTER_NODE_IP,
+		CLUSTER_NODE_PORT:          instance.CLUSTER_NODE_PORT,
+		CLUSTER_NODE_HEARTBIT_PORT: instance.CLUSTER_NODE_HEARTBIT_PORT,
+		NUMB_VNODES:                instance.NUMB_VNODES,
+		DATA_FOLDER:                instance.DATA_FOLDER,
+	}
+
+	conf.LOGGER = GetLogger()
+
+	return conf
 }
 
 func SetConfFile(confFilePath string) {
@@ -59,7 +104,7 @@ func OverwritePort(port string) {
 	instance.NODE_PORT = port
 }
 
-func initClusterConfiguration(fileName string, fileType string, paths []string) utils.Configuration {
+func initClusterConfiguration(fileName string, fileType string, paths []string) ClusterConfiguration {
 
 	viper.SetConfigName(fileName)
 	viper.SetConfigType(fileType)
@@ -79,7 +124,7 @@ func initClusterConfiguration(fileName string, fileType string, paths []string) 
 		}
 	}
 
-	conf := utils.Configuration{
+	conf := ClusterConfiguration{
 		LOG_LEVEL:                  viper.GetString("logLevel"),
 		LOG_TO:                     viper.GetString("logTo"),
 		LOG_DIR:                    viper.GetString("logDir"),
@@ -91,6 +136,7 @@ func initClusterConfiguration(fileName string, fileType string, paths []string) 
 		NODE_IP:                    viper.GetString("nodeIp"),
 		NODE_PORT:                  viper.GetString("nodePort"),
 		NODE_HEARTBIT_PORT:         viper.GetString("nodeHeartbitPort"),
+		NUMB_VNODES:                viper.GetInt("numberOfVNodes"),
 		CLUSTER_NODE_IP:            viper.GetString("clusterNodeIp"),
 		CLUSTER_NODE_PORT:          viper.GetString("clusterNodePort"),
 		CLUSTER_NODE_HEARTBIT_PORT: viper.GetString("clusterNodeHeartbitPort"),

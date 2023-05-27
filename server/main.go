@@ -66,7 +66,7 @@ func init() {
 	cliMode, cliConfFile, forceRejoin = parseCommandLineParameters()
 
 	if !cliMode {
-		bb, err := bitbox.Init(*cliUtils.GetClusterConfiguration())
+		bb, err := bitbox.Init(cliUtils.GetConfigurationForCluster())
 		if err != nil {
 			panic(err)
 		}

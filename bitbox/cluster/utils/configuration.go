@@ -6,14 +6,8 @@ import (
 )
 
 type Configuration struct {
-	LOG_TO                   string
-	LOG_LEVEL                string
-	LOG_DIR                  string
-	LOG_FILE_NAME            string
-	LOG_FILE_MAX_SIZE        int
-	LOG_FILE_MAX_NUM_BACKUPS int
-	LOG_FILE_MAX_AGE         int
-	LOG_GOSSIP_PROTOCOL      bool
+	LOGGER              Logger
+	LOG_GOSSIP_PROTOCOL bool
 
 	NODE_IP            string
 	NODE_PORT          string
@@ -58,17 +52,11 @@ func VerifyAndSetConfiguration(conf *Configuration) {
 		errors = append(errors, "dataFolder is required")
 	}
 
-	if conf.LOG_TO == "" {
-		conf.LOG_TO = "console"
-	}
-
-	if conf.LOG_LEVEL == "" {
-		conf.LOG_TO = "info"
-	}
-
 	if conf.NUMB_VNODES == 0 {
 		conf.NUMB_VNODES = 8
 	}
+
+	InitLogger(conf.LOGGER)
 
 	if len(errors) > 0 {
 		for _, e := range errors {

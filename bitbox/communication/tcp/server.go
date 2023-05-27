@@ -14,7 +14,7 @@ type TcpServer struct {
 	ip              string
 	port            string
 	nodeCommChannel chan MessageFromCluster
-	logger          *utils.Logger
+	logger          *utils.InternalLogger
 	listener        net.Listener
 	quit            chan bool
 }
@@ -84,7 +84,7 @@ func (s *TcpServer) Run() chan MessageFromCluster {
 				case <-s.quit:
 					return
 				default:
-					s.logger.Error().Err(err).Msg("TCP Server error")
+					s.logger.Error(err, "TCP Server error")
 					os.Exit(1)
 				}
 			} else {
