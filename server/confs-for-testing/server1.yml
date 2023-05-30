@@ -30,6 +30,8 @@ logTo: both
 logLevel: debug
 # LOG_GOSSIP_PROTOCOL: true | false 
 logGossipProtocol: true
+# LOG_STORAGE: true | false - to log messages from the stroage layer
+logStorage: true
 
 # if logTo is file or both:
 logDir: ./logs/node1

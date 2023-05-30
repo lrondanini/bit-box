@@ -20,10 +20,10 @@ type ClusterConfiguration struct {
 	LOG_FILE_MAX_NUM_BACKUPS int
 	LOG_FILE_MAX_AGE         int
 	LOG_GOSSIP_PROTOCOL      bool
-
-	NODE_IP            string
-	NODE_PORT          string
-	NODE_HEARTBIT_PORT string
+	LOG_STORAGE              bool
+	NODE_IP                  string
+	NODE_PORT                string
+	NODE_HEARTBIT_PORT       string
 
 	CLUSTER_NODE_IP            string
 	CLUSTER_NODE_PORT          string
@@ -61,6 +61,7 @@ func GetConfigurationForCluster() utils.Configuration {
 
 	conf := utils.Configuration{
 		LOG_GOSSIP_PROTOCOL:        instance.LOG_GOSSIP_PROTOCOL,
+		LOG_STORAGE:                instance.LOG_STORAGE,
 		NODE_IP:                    instance.NODE_IP,
 		NODE_PORT:                  instance.NODE_PORT,
 		NODE_HEARTBIT_PORT:         instance.NODE_HEARTBIT_PORT,
@@ -133,6 +134,7 @@ func initClusterConfiguration(fileName string, fileType string, paths []string) 
 		LOG_FILE_MAX_NUM_BACKUPS:   viper.GetInt("logMaxBackups"),
 		LOG_FILE_MAX_AGE:           viper.GetInt("logMaxAge"),
 		LOG_GOSSIP_PROTOCOL:        viper.GetBool("logGossipProtocol"),
+		LOG_STORAGE:                viper.GetBool("logStorage"),
 		NODE_IP:                    viper.GetString("nodeIp"),
 		NODE_PORT:                  viper.GetString("nodePort"),
 		NODE_HEARTBIT_PORT:         viper.GetString("nodeHeartbitPort"),

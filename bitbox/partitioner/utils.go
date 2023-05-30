@@ -3,6 +3,7 @@ package partitioner
 import (
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"time"
@@ -13,7 +14,7 @@ const REPLICATION_FACTOR = 3
 func GenerateNewPartitionTable(assignNumbVNodes int, nodeId string, nodeIp string, nodePort string) *[]VNode {
 	var vnodes []VNode
 
-	const max uint64 = 18446744073709551615
+	const max uint64 = math.MaxUint64 //18446744073709551615
 
 	var multiplier = max / uint64(assignNumbVNodes)
 

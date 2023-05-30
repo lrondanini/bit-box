@@ -14,8 +14,6 @@ import (
 	"github.com/lrondanini/bit-box/bitbox/serverStatus"
 	"github.com/lrondanini/bit-box/bitbox/serverStatus/heartBitStatus"
 	"github.com/lrondanini/bit-box/bitbox/storage"
-
-	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type ClusterManager struct {
@@ -52,13 +50,15 @@ func InitClusterManager(currentNode *Node) (*ClusterManager, error) {
 
 	pt, errDB := partitioner.LoadFromDb(sysCollection)
 	if errDB != nil {
-		if errDB == leveldb.ErrNotFound {
+		if errDB == storage.ErrKeyNotFound {
 			pt = partitioner.InitEmptyPartitionTable()
 		} else {
 			return nil, errDB
 		}
 	}
 	clusterManager.partitionTable = *pt
+
+	//partitioner.PrintVnodes(pt.VNodes)
 
 	clusterManager.servers = server.InitServerList(&clusterManager.partitionTable)
 
@@ -89,6 +89,7 @@ func (cm *ClusterManager) StartCommunications() chan actions.NodeActions {
 
 func (cm *ClusterManager) Shutdown() {
 	cm.commManager.Shutdown()
+	cm.systemDb.Close()
 }
 
 func (cm *ClusterManager) JoinCluster(forceRejoin bool) error {

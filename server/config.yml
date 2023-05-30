@@ -2,35 +2,39 @@
 #   NODE CONFIGURATION
 #***************************************
 nodeIp: localhost
-nodePort: 3456
+nodePort: 1111
 
 #port used for UDP heartbit connections
-nodeHeartbitPort: 3457 
+nodeHeartbitPort: 1112 
 
 #number of vnodes assigned to this node
 numberOfVNodes: 8
 
 #where to store noed's data
-dataFolder: ./data
+dataFolder: ./data/node1
 
 #***************************************
 #   IP and PORT of any other node in the cluster
 #***************************************
 clusterNodeIp: localhost
-clusterNodePort: 2345
-clusterNodeHeartbitPort: 2346
+clusterNodePort: 2222
+clusterNodeHeartbitPort: 2223
 
 #***************************************
 #   LOGGING INFOS
 #***************************************
 # LOG_TO: console | file | both
-logTo: console
+logTo: both
 # LOG_LEVEL = trace | debug | info | warn | error | fatal | panic 
 # in order of verbosity from trace (max) to panic (min)
 logLevel: debug
+# LOG_GOSSIP_PROTOCOL: true | false 
+logGossipProtocol: true
+# LOG_STORAGE: true | false - to log messages from the stroage layer
+logStorage: true
 
 # if logTo is file or both:
-logDir: ./logs
+logDir: ./logs/node1
 logFile: server.log
 # logMaxSize: the max size in MB of the logfile before it's rolled
 logMaxSize: 500 # megabytes

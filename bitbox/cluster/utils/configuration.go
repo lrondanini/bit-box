@@ -8,6 +8,7 @@ import (
 type Configuration struct {
 	LOGGER              Logger
 	LOG_GOSSIP_PROTOCOL bool
+	LOG_STORAGE         bool
 
 	NODE_IP            string
 	NODE_PORT          string

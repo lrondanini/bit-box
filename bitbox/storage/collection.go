@@ -2,41 +2,65 @@ package storage
 
 import (
 	"errors"
+	"path/filepath"
+	"reflect"
+	"time"
 
+	"github.com/dgraph-io/badger/v4"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
-	"github.com/syndtr/goleveldb/leveldb"
 )
 
+func DbGarbageCollector(db *badger.DB) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		lsm, vlog := db.Size()
+		if lsm > 1024*1024*8 || vlog > 1024*1024*32 {
+			db.RunValueLogGC(0.5)
+		}
+	}
+}
+
+var ErrKeyNotFound = badger.ErrKeyNotFound
+
 type Collection struct {
-	name   string
-	folder string
-	db     *leveldb.DB
+	name       string
+	folder     string
+	db         *badger.DB
+	logEnabled bool
 }
 
 func OpenCollection(collectionName string) (*Collection, error) {
-
 	conf := utils.GetClusterConfiguration()
 
 	folder := "./"
 	if conf.DATA_FOLDER != "" {
 		folder = conf.DATA_FOLDER
-		lastChar := folder[len(folder)-1:]
-		if lastChar != "/" {
-			folder = folder + "/" + collectionName
-		} else {
-			folder = folder + collectionName
-		}
+	}
+	folder = filepath.Join(folder, collectionName)
+
+	logManager := &dbLogger{
+		logger:   utils.GetLogger(),
+		disabled: !conf.LOG_STORAGE,
 	}
 
-	collection, err := leveldb.OpenFile(folder, nil)
+	options := badger.DefaultOptions(folder)
+	options.IndexCacheSize = 100 << 20
+	options.Logger = logManager
+
+	db, err := badger.Open(options)
+
 	if err != nil {
-		return nil, errors.New("[db-collection-1]" + err.Error())
+		return nil, err
 	}
+
+	go DbGarbageCollector(db)
 
 	return &Collection{
-		name:   collectionName,
-		folder: folder,
-		db:     collection,
+		name:       collectionName,
+		folder:     folder,
+		db:         db,
+		logEnabled: conf.LOG_STORAGE,
 	}, nil
 }
 
@@ -44,37 +68,125 @@ func (c *Collection) Close() {
 	c.db.Close()
 }
 
-func (c *Collection) Set(k, v string) error {
-	return c.db.Put([]byte(k), []byte(v), nil)
-}
+func (c *Collection) Set(k interface{}, v interface{}) error {
 
-func (c *Collection) Get(k string) (string, error) {
-	v, err := c.db.Get([]byte(k), nil)
+	kBytes, err := ToBytes(k)
+
 	if err != nil {
-		if err == leveldb.ErrNotFound {
-			return "", leveldb.ErrNotFound
-		}
-		return "", errors.New("[db-collection-2]" + err.Error())
+		return err
 	}
-	return string(v), nil
+
+	vBytes, err := EncodeValue(v)
+
+	if err != nil {
+		return err
+	}
+
+	return c._set(kBytes, vBytes)
 }
 
-func (c *Collection) Delete(k string) error {
-	return c.db.Delete([]byte(k), nil)
+func (c *Collection) Get(k interface{}, v interface{}) error {
+
+	//verify that v is passed as pointer address (&)
+	value := reflect.ValueOf(v)
+	if value.Type().Kind() != reflect.Pointer {
+		return errors.New("attempt to decode into a non-pointer")
+	}
+
+	kBytes, err := ToBytes(k)
+
+	if err != nil {
+		return err
+	}
+
+	vBytes, err := c._get(kBytes)
+
+	if err != nil {
+		return err
+	}
+
+	//no need for & on second parameter, it is already a pointer
+	err = DecodeValue(vBytes, v)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (c *Collection) BatchSet(s map[string]string) error {
-	batch := new(leveldb.Batch)
-	for k, v := range s {
-		batch.Put([]byte(k), []byte(v))
+func (c *Collection) Delete(k interface{}) error {
+
+	kBytes, err := ToBytes(k)
+
+	if err != nil {
+		return err
 	}
-	return c.db.Write(batch, nil)
+
+	return c._delete(kBytes)
 }
 
-func (c *Collection) BatchDelete(s []string) error {
-	batch := new(leveldb.Batch)
-	for _, v := range s {
-		batch.Delete([]byte(v))
+func (c *Collection) _set(k []byte, v []byte) error {
+	if len(k) == 0 {
+		return errors.New("key cannot be empty")
 	}
-	return c.db.Write(batch, nil)
+	//empty values can cause problems:
+	if len(v) == 0 {
+		v = []byte(" ")
+	}
+
+	// Start a writable transaction.
+	txn := c.db.NewTransaction(true)
+
+	err := txn.Set(k, v)
+	if err != nil {
+		txn.Discard()
+		return err
+	}
+
+	// Commit the transaction and check for error (also closes the transaction).
+	if err := txn.Commit(); err != nil {
+		txn.Discard()
+		return err
+	}
+
+	return nil
+}
+
+func (c *Collection) _get(k []byte) ([]byte, error) {
+	txn := c.db.NewTransaction(false)
+	defer txn.Discard()
+
+	// Use the transaction...
+	item, err := txn.Get(k)
+	if err != nil {
+		return nil, err
+	}
+
+	var valCopy []byte
+
+	valCopy, err = item.ValueCopy(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return valCopy, err
+}
+
+func (c *Collection) _delete(k []byte) error {
+	txn := c.db.NewTransaction(true)
+
+	err := txn.Delete(k)
+	if err != nil {
+		txn.Discard()
+		return err
+	}
+
+	// Commit the transaction and check for error (also closes the transaction).
+	if err := txn.Commit(); err != nil {
+		txn.Discard()
+		return err
+	}
+
+	return nil
 }
