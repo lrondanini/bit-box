@@ -192,3 +192,14 @@ func (n *Node) manageHeartbitEvents() {
 
 // 	//load node details from file
 // }
+
+func (n *Node) Upsert() {
+}
+
+func (n *Node) Delete() {
+
+}
+
+func (n *Node) Get() {
+
+}

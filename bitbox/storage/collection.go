@@ -115,6 +115,18 @@ func (c *Collection) Get(k interface{}, v interface{}) error {
 	return nil
 }
 
+func (c *Collection) GetIterator() (*Iterator, error) {
+	return GetIterator(c.db)
+}
+
+func (c *Collection) GetIteratorFrom(from interface{}) (*Iterator, error) {
+	return GetIteratorFrom(c.db, from)
+}
+
+func (c *Collection) GetFilteredIterator(from interface{}, till interface{}) (*Iterator, error) {
+	return GetFilteredIterator(c.db, from, till)
+}
+
 func (c *Collection) Delete(k interface{}) error {
 
 	kBytes, err := ToBytes(k)

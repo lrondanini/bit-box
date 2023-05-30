@@ -147,28 +147,28 @@ func FromBytes(i []byte, t interface{}) (err error) {
 		value.Elem().SetUint(uint64(x))
 	case int:
 		if strconv.IntSize == 32 {
-			var max uint32 = math.MaxUint32
+			var max uint32 = 2147483647
 			tmp := binary.BigEndian.Uint32(i)
 			x := int32(tmp - max)
 			value.Elem().SetInt(int64(x))
 		} else if strconv.IntSize == 64 {
-			var max uint64 = math.MaxUint64
+			var max uint64 = 9223372036854775807
 			tmp := binary.BigEndian.Uint64(i)
 			x := int64(tmp - max)
 			value.Elem().SetInt(int64(x))
 		}
 	case int16:
-		var max uint16 = math.MaxUint16
+		var max uint16 = 32767
 		tmp := binary.BigEndian.Uint16(i)
 		x := int16(tmp - max)
 		value.Elem().SetInt(int64(x))
 	case int32:
-		var max uint32 = math.MaxUint32
+		var max uint32 = 2147483647
 		tmp := binary.BigEndian.Uint32(i)
 		x := uint32(tmp - max)
 		value.Elem().SetInt(int64(x))
 	case int64:
-		var max uint64 = math.MaxUint64
+		var max uint64 = 9223372036854775807
 		tmp := binary.BigEndian.Uint64(i)
 		x := int64(tmp - max)
 		value.Elem().SetInt(int64(x))
@@ -176,7 +176,7 @@ func FromBytes(i []byte, t interface{}) (err error) {
 		x := math.Float64frombits(binary.BigEndian.Uint64(i))
 		value.Elem().SetFloat(x)
 	case time.Time:
-		var max uint64 = math.MaxUint64
+		var max uint64 = 9223372036854775807
 		tmp := binary.BigEndian.Uint64(i)
 		ct := int64(tmp - max)
 		x := time.Unix(0, ct)
