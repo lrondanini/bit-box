@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lrondanini/bit-box/bitbox/actions"
 	"github.com/lrondanini/bit-box/bitbox/cluster/server"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
 	"github.com/lrondanini/bit-box/bitbox/partitioner"
@@ -341,12 +340,7 @@ func (tm *TopologyManager) calculateAndSubmitPartitionTable(s server.Server, cur
 			err := tm.clusterManager.updatePartitionTable(&tm.tempPartitionTable)
 			if err != nil {
 				//do not return any error to the cluster, its a problem with this node
-
 				tm.logger.Error(err, "Error committing partition table")
-
-			} else {
-				//notify current node
-				tm.clusterManager.nodeCummunicationChannel <- actions.NewPartitionTable
 			}
 
 			//broadcast commit and release
@@ -414,7 +408,6 @@ func (tm *TopologyManager) manageCommitPartitionTableRequest(requestedByNodeId s
 
 	} else {
 		tm.logger.Info("Partition table committed, new timestamp: " + strconv.FormatInt(tm.tempPartitionTable.Timestamp, 10))
-		tm.clusterManager.nodeCummunicationChannel <- actions.NewPartitionTable
 	}
 
 	tm.releaseMaster(requestedByNodeId, false)

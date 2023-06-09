@@ -3,10 +3,16 @@ package partitioner
 import (
 	"errors"
 	"fmt"
-	"math"
 	"math/rand"
+	"os"
 	"sort"
+	"strconv"
+	"strings"
+	"text/tabwriter"
 	"time"
+
+	"github.com/rs/xid"
+	"golang.org/x/exp/slices"
 )
 
 const REPLICATION_FACTOR = 3
@@ -14,7 +20,7 @@ const REPLICATION_FACTOR = 3
 func GenerateNewPartitionTable(assignNumbVNodes int, nodeId string, nodeIp string, nodePort string) *[]VNode {
 	var vnodes []VNode
 
-	const max uint64 = math.MaxUint64 //18446744073709551615
+	const max uint64 = 199 // math.MaxUint64 //18446744073709551615
 
 	var multiplier = max / uint64(assignNumbVNodes)
 
@@ -25,7 +31,8 @@ func GenerateNewPartitionTable(assignNumbVNodes int, nodeId string, nodeIp strin
 		if maxToken < multiplier {
 			maxToken = max
 		}
-		vnodes = append(vnodes, *InitVNode(prev, maxToken, nodeId, nodeIp, nodePort, []string{}))
+
+		vnodes = append(vnodes, *InitVNode(prev, maxToken, "", []string{}, xid.New().String(), nodeId, nodeIp, nodePort, []string{nodeId}))
 		prev = maxToken + 1
 	}
 
@@ -38,44 +45,59 @@ func GetRandom(max int) int {
 	return (r.Intn(max-min) + min)
 }
 
-func UpdateReplication(nodesInCluster *[]string, nodeId string, currentNodeReplication *[]string) {
-	// fmt.Println(nodeId, "#############")
-	// fmt.Println(*currentNodeReplication)
+func UpdateReplication(nodesInClusterReplicationLoad *map[string]int, nodeId string, currentNodeReplication *[]string) {
+
+	//fmt.Println(nodeId, "#############")
+
+	var nodesInCluster = OrderInReverse(nodesInClusterReplicationLoad)
+
+	//fmt.Println(*currentNodeReplication)
 	var numberOfReplicas = REPLICATION_FACTOR - 1
 
-	var numberOfNodesInCluster = len(*nodesInCluster)
+	var numberOfNodesInCluster = len(nodesInCluster)
+
+	//fmt.Println(numberOfNodesInCluster)
 
 	if numberOfNodesInCluster <= numberOfReplicas {
-		numberOfReplicas = numberOfNodesInCluster - 1
-	}
-
-	if numberOfReplicas < 0 {
-		numberOfReplicas = 0
-	}
-
-	var tmp = make(map[string]bool)
-
-	for _, v := range *currentNodeReplication {
-		tmp[v] = true
-	}
-
-	for {
-		if len(*currentNodeReplication) < numberOfReplicas {
-			for _, v := range *nodesInCluster {
-				// fmt.Println(v)
-				if v != nodeId && !tmp[v] && len(*currentNodeReplication) < numberOfReplicas {
-					*currentNodeReplication = append(*currentNodeReplication, v)
-					tmp[v] = true
-				}
+		for _, v := range nodesInCluster {
+			if !slices.Contains(*currentNodeReplication, v) {
+				*currentNodeReplication = append(*currentNodeReplication, v)
 			}
-		} else {
-			break
 		}
+	} else {
+		var tmp []string
+
+		var dups = make(map[string]bool)
+		for _, v := range *currentNodeReplication {
+			if v != nodeId && !dups[v] {
+				tmp = append(tmp, v)
+			}
+
+			dups[v] = true
+		}
+
+		//fmt.Println(dups)
+
+		for {
+			if len(tmp) < numberOfReplicas {
+				for _, v := range nodesInCluster {
+					if v != nodeId && len(tmp) < numberOfReplicas && !dups[v] {
+						(*nodesInClusterReplicationLoad)[v]++
+						tmp = append(tmp, v)
+					}
+				}
+			} else {
+				break
+			}
+		}
+
+		*currentNodeReplication = tmp
+		//fmt.Println()
 	}
 
 	// fmt.Println(*currentNodeReplication)
 	// fmt.Println(nodeId, "#############")
-	// fmt.Println()
+	//fmt.Println()
 }
 
 type entry struct {
@@ -104,6 +126,8 @@ func OrderInReverse(m *map[string]int) []string {
 		onlyKeys = append(onlyKeys, e.key)
 		//fmt.Printf("%q : %d\n", e.key, e.val)
 	}
+
+	//fmt.Println()
 	return onlyKeys
 }
 
@@ -128,7 +152,6 @@ func AddNode(oldPartionTable *[]VNode, assignNumbVNodes int, newNodeId string, n
 		}
 	}
 
-	var nodesInClusterInReplciationOrder = OrderInReverse(&nodesInClusterReplicationLoad)
 	numberOfVnodesInTheCluster := len(*oldPartionTable)
 	//////////////
 
@@ -160,24 +183,139 @@ func AddNode(oldPartionTable *[]VNode, assignNumbVNodes int, newNodeId string, n
 			return nil, errors.New("partition table already contains a node with id: " + newNodeId)
 		}
 		if vnodesPositions[k] {
-			UpdateReplication(&nodesInClusterInReplciationOrder, v.NodeId, &v.ReplicatedTo)
+			prevReplicatedTo := v.ReplicatedTo
+			UpdateReplication(&nodesInClusterReplicationLoad, v.NodeId, &v.ReplicatedTo)
 			var replicatedTo = []string{}
-			UpdateReplication(&nodesInClusterInReplciationOrder, newNodeId, &replicatedTo)
+			UpdateReplication(&nodesInClusterReplicationLoad, newNodeId, &replicatedTo)
 			et := v.StartToken + ((v.EndToken - v.StartToken) / 2)
-			v1 := *InitVNode(v.StartToken, et, newNodeId, newNodeIp, newNodePort, replicatedTo)
-			v2 := *InitVNode(et+1, v.EndToken, v.NodeId, v.NodeIp, v.NodePort, v.ReplicatedTo)
+			v1 := *InitVNode(v.StartToken, et, v.NodeId, prevReplicatedTo, xid.New().String(), newNodeId, newNodeIp, newNodePort, replicatedTo)
+			v2 := *InitVNode(et+1, v.EndToken, v.NodeId, prevReplicatedTo, v.VNodeID, v.NodeId, v.NodeIp, v.NodePort, v.ReplicatedTo)
 			newPartitionTable = append(newPartitionTable, v1)
 			newPartitionTable = append(newPartitionTable, v2)
 		} else {
-			if len(v.ReplicatedTo) < numberOfReplicas {
-				UpdateReplication(&nodesInClusterInReplciationOrder, v.NodeId, &v.ReplicatedTo)
-			}
+			prevReplicatedTo := v.ReplicatedTo
+			UpdateReplication(&nodesInClusterReplicationLoad, v.NodeId, &v.ReplicatedTo)
+			v.PrevReplicatedTo = prevReplicatedTo
+			v.PrevNodeID = v.NodeId
 			newPartitionTable = append(newPartitionTable, v)
 		}
 
 	}
 
+	//rebalance replicas
+	rebalanceReplicas(newNodeId, assignNumbVNodes, &newPartitionTable)
+
 	return &newPartitionTable, nil
+}
+
+func orderAsc(nodes map[string]int) []string {
+	keys := []string{}
+
+	for key := range nodes {
+		keys = append(keys, key)
+	}
+
+	sort.Slice(keys, func(i, j int) bool {
+		return nodes[keys[i]] > nodes[keys[j]]
+	})
+
+	return keys
+}
+
+func getNodeToStealreplicaFrom(mm map[string]int) string {
+	orderedNodes := orderAsc(mm)
+	n := 0
+	stealReplicaFrom := ""
+	done := false
+	for !done {
+		stealReplicaFrom = orderedNodes[n]
+		currentRepOnNode := mm[stealReplicaFrom]
+		if currentRepOnNode == 1 {
+			n++
+			if n > len(orderedNodes) {
+				stealReplicaFrom = ""
+				done = true
+			}
+		} else {
+			done = true
+		}
+	}
+
+	return stealReplicaFrom
+}
+
+func rebalanceReplicas(newNodeId string, assignNumbVNodes int, newPartitionTable *[]VNode) {
+
+	var numberOfReplicasForNewNode = (REPLICATION_FACTOR - 1) * assignNumbVNodes
+
+	var mm = make(map[string]int)
+
+	for _, v := range *newPartitionTable {
+		for _, n := range v.ReplicatedTo {
+			mm[n]++
+		}
+	}
+
+	// for k, e := range mm {
+	// 	fmt.Println(k, "    ", e)
+	// }
+
+	if mm[newNodeId] < numberOfReplicasForNewNode {
+		cr := mm[newNodeId]
+		stealReplicaFrom := getNodeToStealreplicaFrom(mm)
+
+		for cr < numberOfReplicasForNewNode && stealReplicaFrom != "" {
+			skipped := 0
+		LOOP:
+			for k, v := range *newPartitionTable {
+				if v.NodeId != newNodeId {
+					if slices.Contains(v.ReplicatedTo, stealReplicaFrom) && !slices.Contains(v.ReplicatedTo, newNodeId) {
+
+						tmp := []string{}
+						//fmt.Println(v.VNodeID, "    ", v.ReplicatedTo)
+						for _, n := range v.ReplicatedTo {
+							if n == stealReplicaFrom {
+								tmp = append(tmp, newNodeId)
+							} else {
+								tmp = append(tmp, n)
+							}
+						}
+						(*newPartitionTable)[k].ReplicatedTo = tmp
+						mm[stealReplicaFrom]--
+						cr++
+						stealReplicaFrom = getNodeToStealreplicaFrom(mm)
+						break LOOP
+					} else {
+						skipped++
+					}
+				} else {
+					skipped++
+				}
+			}
+
+			if skipped == len(*newPartitionTable) {
+				//out, not enough nodes to steal from
+				break
+			}
+		}
+
+		// mm = make(map[string]int)
+
+		// for _, v := range *newPartitionTable {
+		// 	for _, n := range v.ReplicatedTo {
+		// 		mm[n]++
+		// 	}
+		// }
+
+		// fmt.Println()
+		// for k, e := range mm {
+		// 	fmt.Println(k, "    ", e)
+		// }
+
+	}
+
+	// fmt.Println()
+
 }
 
 // uses the fact that originally a node was inserted splitting the next node in the ring
@@ -185,7 +323,7 @@ func AddNode(oldPartionTable *[]VNode, assignNumbVNodes int, newNodeId string, n
 // note also that a node gets inserted only one time => no 2 CONSECUTIVE vnodes should be ever assigned to the same node
 func RemoveNode(oldPartionTable *[]VNode, oldNodeId string) *[]VNode {
 
-	//calcualte stats used to generate the PT (without the node to be removed)
+	//calculate stats used to generate the PT (without the node to be removed)
 	var nodesInClusterReplicationLoad = make(map[string]int)
 	tmp := make(map[string]bool)
 	for _, v := range *oldPartionTable {
@@ -207,7 +345,6 @@ func RemoveNode(oldPartionTable *[]VNode, oldNodeId string) *[]VNode {
 
 	}
 
-	var nodesInClusterInReplciationOrder = OrderInReverse(&nodesInClusterReplicationLoad)
 	//////////////
 
 	var mm = make(map[string]int)
@@ -242,8 +379,19 @@ func RemoveNode(oldPartionTable *[]VNode, oldNodeId string) *[]VNode {
 					tmp = append(tmp, n)
 				}
 			}
-			UpdateReplication(&nodesInClusterInReplciationOrder, v.NodeId, &tmp)
+			UpdateReplication(&nodesInClusterReplicationLoad, v.NodeId, &tmp)
+			prevReplicatedTo := v.ReplicatedTo
 			v.ReplicatedTo = tmp
+			if v.PrevNodeID == oldNodeId {
+				v.PrevNodeID = v.NodeId
+			}
+			tmp = []string{}
+			for _, n := range prevReplicatedTo {
+				if n != oldNodeId {
+					tmp = append(tmp, n)
+				}
+			}
+			v.PrevReplicatedTo = tmp
 			newPartitionTable = append(newPartitionTable, v)
 		}
 	}
@@ -251,7 +399,7 @@ func RemoveNode(oldPartionTable *[]VNode, oldNodeId string) *[]VNode {
 	return &newPartitionTable
 }
 
-// ************** DEBUG FUNCTIONS *************************************************
+// ************** FUNCTIONS USED DURING DEV *************************************************
 func PrintDistribution(vnodes []VNode) {
 	var mm = make(map[string]int)
 
@@ -279,11 +427,26 @@ func PrintDistribution(vnodes []VNode) {
 	fmt.Println()
 }
 
+func toString(v VNode) string {
+	return "ST:\t" + strconv.FormatUint(v.StartToken, 10) + "-\t ET:\t" + strconv.FormatUint(v.EndToken, 10) + "-\t VN:\t" + v.VNodeID + "-\t PVN:\t" + v.PrevNodeID + "-\t PRT:\t" + strings.Join(v.PrevReplicatedTo, ",") + "-\t N:\t" + v.NodeId + "-\t RT:\t" + strings.Join(v.ReplicatedTo, ",") + "-"
+}
+
 func PrintVnodes(vnodes []VNode) {
+
+	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', tabwriter.AlignRight)
+
+	s := "StartToken\t * \tEndToken\t * \tVNodeID\t * \tPrevNodeID\t * \tPrevReplicatedTo\t * \tNodeId\t * \tReplicatedTo"
+	//fmt.Println(v.StartToken, v.EndToken, v.VNodeID, v.PrevNodeID, v.PrevReplicatedTo, v.NodeId, v.ReplicatedTo)
+	fmt.Fprintln(w, s)
+
 	for _, v := range vnodes {
-		fmt.Println(v.StartToken, v.EndToken, v.NodeId, v.ReplicatedTo)
+		s := strconv.FormatUint(v.StartToken, 10) + "\t * \t" + strconv.FormatUint(v.EndToken, 10) + "\t * \t" + v.VNodeID + "\t * \t" + v.PrevNodeID + "\t * \t" + strings.Join(v.PrevReplicatedTo, ",") + "\t * \t" + v.NodeId + "\t * \t" + strings.Join(v.ReplicatedTo, ",")
+		//fmt.Println(v.StartToken, v.EndToken, v.VNodeID, v.PrevNodeID, v.PrevReplicatedTo, v.NodeId, v.ReplicatedTo)
+		fmt.Fprintln(w, s)
 	}
-	fmt.Println()
+
+	w.Flush()
+
 }
 
 func PrintReplicastDistribution(vnodes []VNode) {

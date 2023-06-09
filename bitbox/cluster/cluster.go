@@ -32,7 +32,7 @@ type ClusterManager struct {
 }
 
 func InitClusterManager(currentNode *Node) (*ClusterManager, error) {
-	sysCollection, err := storage.OpenCollection("system")
+	sysCollection, err := storage.OpenCollection(storage.SYSTEM_COLLECTION_NAME)
 
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func InitClusterManager(currentNode *Node) (*ClusterManager, error) {
 	}
 	clusterManager.partitionTable = *pt
 
-	//partitioner.PrintVnodes(pt.VNodes)
+	partitioner.PrintVnodes(pt.VNodes)
 
 	clusterManager.servers = server.InitServerList(&clusterManager.partitionTable)
 
@@ -205,6 +205,10 @@ func (cm *ClusterManager) BootstrapNewNode() error {
 }
 
 func (cm *ClusterManager) JoinClusterAsNewNode() error {
+
+	//reset node to a clean state
+	cm.partitionTable = *partitioner.InitEmptyPartitionTable()
+
 	var conf = utils.GetClusterConfiguration()
 
 	//contact the other cluster node asking to join
@@ -229,11 +233,14 @@ func (cm *ClusterManager) updatePartitionTable(pt *partitioner.PartitionTable) e
 
 	err := cm.partitionTable.SaveToDb(cm.systemDb)
 	if err != nil {
+		//TODO: what to do here?
 		return err
 	}
 
-	//start heatbit manager
 	cm.currentServerStatus = serverStatus.Alive
+	//notify current node
+	cm.nodeCummunicationChannel <- actions.NewPartitionTable
+
 	return nil
 }
 

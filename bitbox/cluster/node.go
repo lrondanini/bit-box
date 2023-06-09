@@ -9,17 +9,21 @@ import (
 	"github.com/lrondanini/bit-box/bitbox/actions"
 	"github.com/lrondanini/bit-box/bitbox/cluster/server"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
+	"github.com/lrondanini/bit-box/bitbox/partitioner"
+	"github.com/lrondanini/bit-box/bitbox/storage"
 
 	"github.com/hashicorp/serf/serf"
 )
 
 type Node struct {
-	id              string
-	NodeIp          string
-	NodePort        string
-	clusterManager  *ClusterManager
-	heartbitManager *HeartbitManager
-	logger          *utils.InternalLogger
+	id                    string
+	NodeIp                string
+	NodePort              string
+	clusterManager        *ClusterManager
+	heartbitManager       *HeartbitManager
+	logger                *utils.InternalLogger
+	storageManager        storage.StorageManager
+	currentPartitionTable partitioner.PartitionTable
 }
 
 func GenerateNodeId(nodeIp string, nodePort string) string {
@@ -30,16 +34,19 @@ func InitNode(conf utils.Configuration) (*Node, error) {
 	utils.VerifyAndSetConfiguration(&conf)
 
 	var node Node = Node{
-		id:       GenerateNodeId(conf.NODE_IP, conf.NODE_PORT),
-		NodeIp:   conf.NODE_IP,
-		NodePort: conf.NODE_PORT,
-		logger:   utils.GetLogger(),
+		id:             GenerateNodeId(conf.NODE_IP, conf.NODE_PORT),
+		NodeIp:         conf.NODE_IP,
+		NodePort:       conf.NODE_PORT,
+		logger:         utils.GetLogger(),
+		storageManager: storage.InitStorageManager(),
 	}
 
 	cm, err := InitClusterManager(&node)
 	if err != nil {
 		return nil, err
 	}
+
+	node.currentPartitionTable = cm.partitionTable
 
 	node.clusterManager = cm
 
@@ -96,6 +103,7 @@ func (n *Node) Shutdown() {
 	fmt.Println("Shutting node down...")
 	n.heartbitManager.Shutdown()
 	n.clusterManager.Shutdown()
+	n.storageManager.Shutdown()
 	fmt.Println("...cya!")
 }
 
@@ -119,6 +127,9 @@ func (n *Node) onNewPartitionTable() {
 	n.StartHeartbit()
 	n.logger.Info("New partition table received: " + strconv.FormatInt(n.clusterManager.partitionTable.Timestamp, 10))
 	n.heartbitManager.SetPartitionTableTimestamp(n.clusterManager.partitionTable.Timestamp)
+
+	//n.currentPartitionTable.
+
 }
 
 func (n *Node) manageHeartbitEvents() {
@@ -193,13 +204,86 @@ func (n *Node) manageHeartbitEvents() {
 // 	//load node details from file
 // }
 
-func (n *Node) Upsert() {
+func (n *Node) Upsert(collectionName string, key interface{}, value interface{}) error {
+	c, e := n.storageManager.GetCollection(collectionName)
+
+	if e != nil {
+		return e
+	}
+
+	c.Set(key, value)
+
+	return nil
 }
 
-func (n *Node) Delete() {
+func (n *Node) Get(collectionName string, key interface{}, value interface{}) error {
+	c, e := n.storageManager.GetCollection(collectionName)
 
+	if e != nil {
+		return e
+	}
+
+	e = c.Get(key, value)
+
+	if e != nil {
+		return e
+	}
+
+	return nil
 }
 
-func (n *Node) Get() {
+func (n *Node) Delete(collectionName string, key interface{}) error {
+	c, e := n.storageManager.GetCollection(collectionName)
 
+	if e != nil {
+		return e
+	}
+
+	e = c.Delete(key)
+
+	if e != nil {
+		return e
+	}
+
+	return nil
+}
+
+func (n *Node) GetIterator(collectionName string) (*storage.Iterator, error) {
+	c, e := n.storageManager.GetCollection(collectionName)
+
+	if e != nil {
+		return nil, e
+	}
+
+	return c.GetIterator()
+}
+
+func (n *Node) GetIteratorFrom(collectionName string, from interface{}) (*storage.Iterator, error) {
+	c, e := n.storageManager.GetCollection(collectionName)
+
+	if e != nil {
+		return nil, e
+	}
+
+	return c.GetIteratorFrom(from)
+}
+
+func (n *Node) GetFilteredIterator(collectionName string, from interface{}, to interface{}) (*storage.Iterator, error) {
+	c, e := n.storageManager.GetCollection(collectionName)
+
+	if e != nil {
+		return nil, e
+	}
+
+	return c.GetFilteredIterator(from, to)
+}
+
+func (n *Node) DeleteCollection(collectionName string) error {
+	c, e := n.storageManager.GetCollection(collectionName)
+
+	if e != nil {
+		return e
+	}
+
+	return c.DeleteCollection()
 }

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"time"
@@ -20,8 +21,6 @@ func DbGarbageCollector(db *badger.DB) {
 		}
 	}
 }
-
-var ErrKeyNotFound = badger.ErrKeyNotFound
 
 type Collection struct {
 	name       string
@@ -66,6 +65,50 @@ func OpenCollection(collectionName string) (*Collection, error) {
 
 func (c *Collection) Close() {
 	c.db.Close()
+}
+
+func (c *Collection) DeleteCollection() error {
+	c.db.Close()
+	return c.db.DropAll()
+}
+
+func (c *Collection) BackUp() {
+	fmt.Println("TODO: implement backup")
+
+	// fi, err := os.OpenFile("backup.txt", os.O_WRONLY|os.O_CREATE, 0666)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// // close fi on exit and check for its returned error
+	// defer func() {
+	// 	if err := fi.Close(); err != nil {
+	// 		panic(err)
+	// 	}
+	// }()
+
+	// var backpTill uint64 //increment by 1 (+1) and pass it again into db.Backup(w, backpTill) to get the next backup
+	// backpTill, err = db.Backup(fi, 0)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// fmt.Println("Backup done till", backpTill)
+}
+
+func (c *Collection) LoadBackUp() {
+	fmt.Println("TODO: implement load backup")
+
+	// fi, err := os.OpenFile("backup.txt", os.O_RDONLY, 0666)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// // close fi on exit and check for its returned error
+	// defer func() {
+	// 	if err := fi.Close(); err != nil {
+	// 		panic(err)
+	// 	}
+	// }()
+
+	// db.Load(fi, 16)
 }
 
 func (c *Collection) Set(k interface{}, v interface{}) error {
