@@ -6,41 +6,47 @@ import (
 	"sync"
 )
 
-const SYSTEM_COLLECTION_NAME = "_system"
+const SYSTEM_DB_NAME = "_system"
+const NODE_STATS_DB_NAME = "_node"
 
 type StorageManager struct {
 	collections map[string]*Collection
+	sync        sync.Mutex
 }
 
 var confGoOne sync.Once
 
-func InitStorageManager() StorageManager {
+func InitStorageManager() *StorageManager {
 	//needed by badgedb to improve performance
 	confGoOne.Do(func() {
-		fmt.Println("ser GOMAXPROCS")
+		fmt.Println("GOMAXPROCS set to 128")
 		runtime.GOMAXPROCS(128)
 	})
 
 	dbManager := StorageManager{
 		collections: make(map[string]*Collection),
 	}
-	return dbManager
+	return &dbManager
 }
 
 func (db *StorageManager) GetCollection(collectionName string) (*Collection, error) {
-	if collectionName == SYSTEM_COLLECTION_NAME {
+	if collectionName == SYSTEM_DB_NAME {
 		return nil, ErrCollectionNameReserved
 	}
 
+	db.sync.Lock()
 	res := db.collections[collectionName]
+	db.sync.Unlock()
 	if res == nil {
 		cn, err := OpenCollection(collectionName)
 		if err != nil {
 			fmt.Println(err)
 			return nil, err
 		}
+		db.sync.Lock()
 		db.collections[collectionName] = cn
 		res = db.collections[collectionName]
+		db.sync.Unlock()
 	}
 
 	if res == nil {
@@ -50,7 +56,7 @@ func (db *StorageManager) GetCollection(collectionName string) (*Collection, err
 }
 
 func (db *StorageManager) DeleteCollection(collectionName string) (err error) {
-	if collectionName == SYSTEM_COLLECTION_NAME {
+	if collectionName == SYSTEM_DB_NAME {
 		return ErrCollectionNameReserved
 	}
 
@@ -65,7 +71,9 @@ func (db *StorageManager) DeleteCollection(collectionName string) (err error) {
 }
 
 func (db *StorageManager) Shutdown() {
+	db.sync.Lock()
 	for _, collection := range db.collections {
 		collection.Close()
 	}
+	db.sync.Unlock()
 }

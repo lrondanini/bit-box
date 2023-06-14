@@ -24,7 +24,7 @@ clusterNodeHeartbitPort: 1112
 #   LOGGING INFOS
 #***************************************
 # LOG_TO: console | file | both
-logTo: both
+logTo: console
 # LOG_LEVEL = trace | debug | info | warn | error | fatal | panic 
 # in order of verbosity from trace (max) to panic (min)
 logLevel: debug

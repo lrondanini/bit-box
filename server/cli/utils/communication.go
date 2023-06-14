@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lrondanini/bit-box/bitbox/actions"
+	"github.com/lrondanini/bit-box/bitbox/cluster/actions"
 	"github.com/lrondanini/bit-box/bitbox/communication"
 	"github.com/lrondanini/bit-box/bitbox/communication/tcp"
 )
@@ -12,13 +12,11 @@ import (
 func CreateAckFrame(nodeId string) *tcp.Frame {
 	sb, _ := communication.SerialiazeBody("ack")
 	return &tcp.Frame{
-		FromNodeId:     nodeId,
-		MessageType:    tcp.Response,
-		StreamId:       0,
-		StreamPosition: 0,
-		Action:         actions.NoAction,
-		Error:          false,
-		Body:           sb,
+		FromNodeId:  nodeId,
+		MessageType: tcp.Response,
+		Action:      actions.NoAction,
+		Error:       false,
+		Body:        sb,
 	}
 }
 
@@ -74,13 +72,11 @@ func (c *Cluster) Shutdown() {
 func (c *Cluster) newErrorFrame(action actions.Action, errorMessage string) *tcp.Frame {
 	sb, _ := communication.SerialiazeBody(errorMessage)
 	return &tcp.Frame{
-		FromNodeId:     c.NodeId,
-		MessageType:    tcp.Response,
-		StreamId:       0,
-		StreamPosition: 0,
-		Action:         action,
-		Error:          true,
-		Body:           sb,
+		FromNodeId:  c.NodeId,
+		MessageType: tcp.Response,
+		Action:      action,
+		Error:       true,
+		Body:        sb,
 	}
 }
 

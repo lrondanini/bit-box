@@ -3,6 +3,9 @@ package partitioner
 import (
 	"fmt"
 	"testing"
+	"time"
+
+	"github.com/lrondanini/bit-box/bitbox/storage"
 )
 
 func TestGenerateNewPartitionTable(t *testing.T) {
@@ -159,8 +162,8 @@ func TestSyncData(t *testing.T) {
 	pt1 := InitEmptyPartitionTable()
 
 	fmt.Println()
-	pt0.CalculateMissingData("node-0", InitPartitionTable(*vnodes, 0))
-	pt1.CalculateMissingData("node-1", InitPartitionTable(*vnodes, 0))
+	pt0.calculateDataSyncTasksForTesting("node-0", InitPartitionTable(*vnodes, 0))
+	pt1.calculateDataSyncTasksForTesting("node-1", InitPartitionTable(*vnodes, 0))
 
 	fmt.Println("---------------- ADDED node-2 ----------------------------------")
 	fmt.Println()
@@ -170,9 +173,9 @@ func TestSyncData(t *testing.T) {
 	pt2 := InitEmptyPartitionTable()
 
 	fmt.Println()
-	pt0.CalculateMissingData("node-0", InitPartitionTable(*vnodes, 0))
-	pt1.CalculateMissingData("node-1", InitPartitionTable(*vnodes, 0))
-	pt2.CalculateMissingData("node-2", InitPartitionTable(*vnodes, 0))
+	pt0.calculateDataSyncTasksForTesting("node-0", InitPartitionTable(*vnodes, 0))
+	pt1.calculateDataSyncTasksForTesting("node-1", InitPartitionTable(*vnodes, 0))
+	pt2.calculateDataSyncTasksForTesting("node-2", InitPartitionTable(*vnodes, 0))
 
 	fmt.Println("---------------- ADDED node-3 ----------------------------------")
 	fmt.Println()
@@ -182,10 +185,10 @@ func TestSyncData(t *testing.T) {
 	pt3 := InitEmptyPartitionTable()
 
 	fmt.Println()
-	pt0.CalculateMissingData("node-0", InitPartitionTable(*vnodes, 0))
-	pt1.CalculateMissingData("node-1", InitPartitionTable(*vnodes, 0))
-	pt2.CalculateMissingData("node-2", InitPartitionTable(*vnodes, 0))
-	pt3.CalculateMissingData("node-3", InitPartitionTable(*vnodes, 0))
+	pt0.calculateDataSyncTasksForTesting("node-0", InitPartitionTable(*vnodes, 0))
+	pt1.calculateDataSyncTasksForTesting("node-1", InitPartitionTable(*vnodes, 0))
+	pt2.calculateDataSyncTasksForTesting("node-2", InitPartitionTable(*vnodes, 0))
+	pt3.calculateDataSyncTasksForTesting("node-3", InitPartitionTable(*vnodes, 0))
 
 	fmt.Println("---------------- ADDED node-4 ----------------------------------")
 	fmt.Println()
@@ -195,41 +198,41 @@ func TestSyncData(t *testing.T) {
 	pt4 := InitEmptyPartitionTable()
 
 	fmt.Println()
-	pt0.CalculateMissingData("node-0", InitPartitionTable(*vnodes, 0))
-	pt1.CalculateMissingData("node-1", InitPartitionTable(*vnodes, 0))
-	pt2.CalculateMissingData("node-2", InitPartitionTable(*vnodes, 0))
-	pt3.CalculateMissingData("node-3", InitPartitionTable(*vnodes, 0))
-	pt4.CalculateMissingData("node-4", InitPartitionTable(*vnodes, 0))
+	pt0.calculateDataSyncTasksForTesting("node-0", InitPartitionTable(*vnodes, 0))
+	pt1.calculateDataSyncTasksForTesting("node-1", InitPartitionTable(*vnodes, 0))
+	pt2.calculateDataSyncTasksForTesting("node-2", InitPartitionTable(*vnodes, 0))
+	pt3.calculateDataSyncTasksForTesting("node-3", InitPartitionTable(*vnodes, 0))
+	pt4.calculateDataSyncTasksForTesting("node-4", InitPartitionTable(*vnodes, 0))
 
 	fmt.Println("---------------- REMOVE node-2 ----------------------------------")
 	fmt.Println()
 	vnodes = RemoveNode(vnodes, "node-2")
 	PrintVnodes(*vnodes)
-	pt0.CalculateMissingData("node-0", InitPartitionTable(*vnodes, 0))
-	pt1.CalculateMissingData("node-1", InitPartitionTable(*vnodes, 0))
-	pt3.CalculateMissingData("node-3", InitPartitionTable(*vnodes, 0))
-	pt4.CalculateMissingData("node-4", InitPartitionTable(*vnodes, 0))
+	pt0.calculateDataSyncTasksForTesting("node-0", InitPartitionTable(*vnodes, 0))
+	pt1.calculateDataSyncTasksForTesting("node-1", InitPartitionTable(*vnodes, 0))
+	pt3.calculateDataSyncTasksForTesting("node-3", InitPartitionTable(*vnodes, 0))
+	pt4.calculateDataSyncTasksForTesting("node-4", InitPartitionTable(*vnodes, 0))
 
 	fmt.Println("---------------- REMOVE node-1 ----------------------------------")
 	fmt.Println()
 	vnodes = RemoveNode(vnodes, "node-1")
 	PrintVnodes(*vnodes)
-	pt0.CalculateMissingData("node-0", InitPartitionTable(*vnodes, 0))
-	pt3.CalculateMissingData("node-3", InitPartitionTable(*vnodes, 0))
-	pt4.CalculateMissingData("node-4", InitPartitionTable(*vnodes, 0))
+	pt0.calculateDataSyncTasksForTesting("node-0", InitPartitionTable(*vnodes, 0))
+	pt3.calculateDataSyncTasksForTesting("node-3", InitPartitionTable(*vnodes, 0))
+	pt4.calculateDataSyncTasksForTesting("node-4", InitPartitionTable(*vnodes, 0))
 
 	fmt.Println("---------------- REMOVE node-0 ----------------------------------")
 	fmt.Println()
 	vnodes = RemoveNode(vnodes, "node-0")
 	PrintVnodes(*vnodes)
-	pt3.CalculateMissingData("node-3", InitPartitionTable(*vnodes, 0))
-	pt4.CalculateMissingData("node-4", InitPartitionTable(*vnodes, 0))
+	pt3.calculateDataSyncTasksForTesting("node-3", InitPartitionTable(*vnodes, 0))
+	pt4.calculateDataSyncTasksForTesting("node-4", InitPartitionTable(*vnodes, 0))
 
 	fmt.Println("---------------- REMOVE node-3 ----------------------------------")
 	fmt.Println()
 	vnodes = RemoveNode(vnodes, "node-3")
 	PrintVnodes(*vnodes)
-	pt4.CalculateMissingData("node-4", InitPartitionTable(*vnodes, 0))
+	pt4.calculateDataSyncTasksForTesting("node-4", InitPartitionTable(*vnodes, 0))
 
 	fmt.Println("---------------- ADDED node-5 ----------------------------------")
 	fmt.Println()
@@ -239,7 +242,40 @@ func TestSyncData(t *testing.T) {
 	pt5 := InitEmptyPartitionTable()
 
 	fmt.Println()
-	pt4.CalculateMissingData("node-4", InitPartitionTable(*vnodes, 0))
-	pt5.CalculateMissingData("node-5", InitPartitionTable(*vnodes, 0))
+	pt4.calculateDataSyncTasksForTesting("node-4", InitPartitionTable(*vnodes, 0))
+	pt5.calculateDataSyncTasksForTesting("node-5", InitPartitionTable(*vnodes, 0))
+
+}
+
+func TestMurMur3(tt *testing.T) {
+
+	var b []byte
+	var e error
+
+	var t1 = time.Now()
+
+	b, e = storage.ToBytes(t1)
+	if e != nil {
+		tt.Error(e)
+	}
+	hash1 := GetHash(b)
+	fmt.Println(hash1)
+
+	for i := 0; i < 100; i++ {
+		time.Sleep(5 * time.Microsecond)
+		var t2 = time.Now()
+		b, e = storage.ToBytes(t2)
+		if e != nil {
+			tt.Error(e)
+		}
+		hash2 := GetHash(b)
+		fmt.Println(hash2)
+
+		if hash2 < hash1 {
+			fmt.Println("FAILED", t1, t2, hash1, hash2)
+		}
+
+		t1 = t2
+	}
 
 }

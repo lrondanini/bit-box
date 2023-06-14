@@ -79,6 +79,27 @@ func main() {
 	if cliMode {
 		cli.Start(cliConfFile)
 	} else {
-		bitBox.Start(forceRejoin)
+		// onReadyChan := make(chan bool)
+		// go bitBox.Start(forceRejoin, onReadyChan)
+		// <-onReadyChan
+		// // bitBox.Upsert("tasks", "key1", "one")
+		// // bitBox.Upsert("tasks", "key2", "two")
+		// // s := ""
+		// // bitBox.Get("tasks", "key1", &s)
+		// // fmt.Println(1, s)
+		// it, e := bitBox.GetIterator("tasks")
+
+		// if e != nil {
+		// } else {
+		// 	var k, v []byte
+		// 	var hash uint64
+		// 	for it.HasMore() {
+		// 		hash, k, v, _ = it.NextRaw()
+		// 		fmt.Println(hash, k, v)
+		// 	}
+		// }
+		// <-onReadyChan
+
+		bitBox.Start(forceRejoin, nil)
 	}
 }

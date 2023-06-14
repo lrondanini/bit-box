@@ -173,6 +173,32 @@ func (i *Iterator) Next(key interface{}, value interface{}) error {
 	return nil
 }
 
+func (i *Iterator) NextRaw() (hash uint64, key []byte, value []byte, err error) {
+	it := i.it
+
+	v := DbValue{}
+
+	if i.hasMore {
+		item := it.Item()
+		key = item.Key()
+		// err = item.Value(func(vBytes []byte) error {
+		// 	value = vBytes
+		// 	return nil
+		// })
+		err := item.Value(func(vBytes []byte) error {
+			value = vBytes
+			return DecodeValue(vBytes, &v)
+		})
+		if err != nil {
+			return 0, nil, nil, err
+		}
+
+		hash = v.Hash
+	}
+
+	return hash, key, value, err
+}
+
 func (i *Iterator) Close() {
 	i.it.Close()
 }

@@ -16,7 +16,8 @@ import (
 
 	cliUtils "github.com/lrondanini/bit-box/server/cli/utils"
 
-	"github.com/lrondanini/bit-box/bitbox/partitioner"
+	"github.com/lrondanini/bit-box/bitbox/cluster/partitioner"
+	"github.com/lrondanini/bit-box/bitbox/communication/types"
 
 	"github.com/common-nighthawk/go-figure"
 	"github.com/eiannone/keyboard"
@@ -177,6 +178,12 @@ func (cli *CLI) Run() {
 				}
 			case "status", "s":
 				cli.PrintClusterStatus()
+			case "node-stats", "ns":
+				if len(uInput.params) > 0 {
+					cli.GetNodeStats(uInput.params[0])
+				} else {
+					cli.GetNodeStats("")
+				}
 			default:
 				if uInput.cmd != "" {
 					fmt.Println("Unknown command: " + uInput.cmd)
@@ -326,10 +333,12 @@ func (cli *CLI) PrintHelp() {
 	fmt.Println()
 	writer := tabwriter.NewWriter(os.Stdout, 0, 8, 1, '\t', tabwriter.AlignRight)
 	fmt.Fprintln(writer, "(short)\tCOMMAND\tPARAMETERS\tDESCRIPTION")
+	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "(h)\thelp\t\tShow this help")
 	fmt.Fprintln(writer, "(e,q)\texit, quit\t\tClose the cli")
 	fmt.Fprintln(writer, "(p)\tping\t\tVerify connection with cluster node")
 	fmt.Fprintln(writer, "(c)\tconf-cli\t\tView and/or configure the cli connection to the cluster")
+	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "(s)\tstatus\t\tShow clusters status")
 	fmt.Fprintln(writer, "(nl)\tnodes-list\t\tLists all the nodes in the cluster")
 	fmt.Fprintln(writer, "(ns)\tnode-stats\t[node-id]\tReturns stats for a specific node, if node-id is empty will prompt a list of nodes to choose from")
@@ -423,51 +432,62 @@ func (cli *CLI) RequestUserConfirmation(message string, requireSpelling bool) bo
 	return false
 }
 
-func (cli *CLI) RemoveNode(nodeId string) {
+func (cli *CLI) SelectNode() (string, error) {
 	remoteNodeId, err1 := cli.GetClusterNodeId()
 
 	if err1 != nil {
-		fmt.Println("Error: " + err1.Error())
-		return
+		return "", err1
 	}
 
+	nodeId := ""
+	pt, err := cli.cluster.CommManager.GetPartitionTableRequest(remoteNodeId)
+
+	if err != nil {
+		return "", err
+	}
+
+	var allNodes []string
+	m := make(map[string]bool)
+	for _, v := range pt.VNodes {
+		if !m[v.NodeId] {
+			allNodes = append(allNodes, v.NodeId)
+			m[v.NodeId] = true
+		}
+	}
+	allNodes = append(allNodes, "Cancel")
+
+	prompt := promptui.Select{
+		Label: "Select Node:",
+		Items: allNodes,
+	}
+
+	_, result, err := prompt.Run()
+
+	if err != nil {
+		return "", err
+	}
+
+	if result == "Cancel" {
+		return "", err
+	} else {
+		nodeId = result
+	}
+
+	return nodeId, nil
+}
+
+func (cli *CLI) RemoveNode(nodeId string) {
+	var err error
+
 	if nodeId == "" {
-
-		pt, err := cli.cluster.CommManager.GetPartitionTableRequest(remoteNodeId)
-
+		nodeId, err = cli.SelectNode()
 		if err != nil {
 			fmt.Println("Error: " + err.Error())
 			return
 		}
-
-		var allNodes []string
-		m := make(map[string]bool)
-		for _, v := range pt.VNodes {
-			if !m[v.NodeId] {
-				allNodes = append(allNodes, v.NodeId)
-				m[v.NodeId] = true
-			}
-		}
-		allNodes = append(allNodes, "Cancel")
-
-		prompt := promptui.Select{
-			Label: "Select Node:",
-			Items: allNodes,
-		}
-
-		_, result, err := prompt.Run()
-
-		if err != nil {
-			fmt.Printf("Prompt failed %v\n", err)
-			return
-		}
-
-		if result == "Cancel" {
-			return
-		} else {
-			nodeId = result
-		}
 	}
+
+	remoteNodeId, _ := cli.GetClusterNodeId()
 
 	goRemove := cli.RequestUserConfirmation("Are you sure you want to remove node "+nodeId+" from the cluster? (yes/No)", true)
 
@@ -481,6 +501,37 @@ func (cli *CLI) RemoveNode(nodeId string) {
 		fmt.Println("Cluster started removing node " + nodeId + ", this operation may take a while to complete")
 	}
 
+}
+
+func (cli *CLI) GetNodeStats(nodeId string) {
+
+	var err error
+
+	if nodeId == "" {
+		nodeId, err = cli.SelectNode()
+		if err != nil {
+			fmt.Println("Error: " + err.Error())
+			return
+		}
+	}
+
+	var stats types.NodeStatsResponse
+	stats, err = cli.cluster.CommManager.SendGetNodeStatsRequest(nodeId)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	t := table.NewWriter()
+
+	t.AppendHeader(table.Row{"Collection", "Number Of Items", "Number Of Upserts", "Number Of Reads"})
+
+	for k, v := range stats.StatsPerCollection {
+		t.AppendRow(table.Row{k, v.NumberOfEntries, v.NumberOfUpserts, v.NumberOfReads})
+	}
+
+	fmt.Println(t.Render())
 }
 
 func (cli *CLI) PrintClusterStatus() {
@@ -503,11 +554,11 @@ func (cli *CLI) PrintClusterStatus() {
 	hasDecommisioned := false
 
 	for _, s := range servers {
-		if s.NodePort == "" {
+		if s.NodePort == "" && len(servers) > 1 {
 			hasDecommisioned = true
-			t.AppendRow(table.Row{s.NodeId, s.NodeIp, s.NodePort, s.NodeHeartbitPort, s.HeartbitStatus, s.PartitionTable, s.Memory, s.CPU, "Decommissioned"})
+			t.AppendRow(table.Row{s.NodeId, s.NodeIp, s.NodePort, s.NodeHeartbitPort, s.HeartbitStatus, s.PartitionTableTimestamp, s.Memory, s.CPU, "Decommissioned"})
 		} else {
-			t.AppendRow(table.Row{s.NodeId, s.NodeIp, s.NodePort, s.NodeHeartbitPort, s.HeartbitStatus, s.PartitionTable, s.Memory, s.CPU + "%", ""})
+			t.AppendRow(table.Row{s.NodeId, s.NodeIp, s.NodePort, s.NodeHeartbitPort, s.HeartbitStatus, s.PartitionTableTimestamp, s.Memory, s.CPU + "%", ""})
 		}
 	}
 

@@ -3,16 +3,17 @@ package cluster
 import (
 	"errors"
 	"fmt"
-	"strconv"
+	"sync"
 	"time"
 
-	"github.com/lrondanini/bit-box/bitbox/actions"
+	"github.com/lrondanini/bit-box/bitbox/cluster/actions"
+	"github.com/lrondanini/bit-box/bitbox/cluster/partitioner"
 	"github.com/lrondanini/bit-box/bitbox/cluster/server"
+	"github.com/lrondanini/bit-box/bitbox/cluster/server/serverStatus"
+	"github.com/lrondanini/bit-box/bitbox/cluster/server/serverStatus/heartBitStatus"
+	"github.com/lrondanini/bit-box/bitbox/cluster/stream"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
 	"github.com/lrondanini/bit-box/bitbox/communication"
-	"github.com/lrondanini/bit-box/bitbox/partitioner"
-	"github.com/lrondanini/bit-box/bitbox/serverStatus"
-	"github.com/lrondanini/bit-box/bitbox/serverStatus/heartBitStatus"
 	"github.com/lrondanini/bit-box/bitbox/storage"
 )
 
@@ -25,14 +26,14 @@ type ClusterManager struct {
 	systemDb                 *storage.Collection
 	servers                  map[string]server.Server
 	currentServerStatus      serverStatus.ServerStatus
-
-	logger *utils.InternalLogger
-
-	topologyManager *TopologyManager
+	dataSyncManager          *DataSyncManager
+	logger                   *utils.InternalLogger
+	topologyManager          *TopologyManager
+	sync                     sync.Mutex
 }
 
 func InitClusterManager(currentNode *Node) (*ClusterManager, error) {
-	sysCollection, err := storage.OpenCollection(storage.SYSTEM_COLLECTION_NAME)
+	sysCollection, err := storage.OpenCollection(storage.SYSTEM_DB_NAME)
 
 	if err != nil {
 		return nil, err
@@ -65,7 +66,24 @@ func InitClusterManager(currentNode *Node) (*ClusterManager, error) {
 	fmt.Println("Current Partition Table:", clusterManager.partitionTable.Timestamp)
 
 	clusterManager.topologyManager = InitTopologyManager(&clusterManager)
+
+	clusterManager.dataSyncManager, errDB = InitDataSyncManager(&clusterManager)
+	if errDB != nil {
+		return nil, errDB
+	}
 	return &clusterManager, nil
+}
+
+func (cm *ClusterManager) CanSetHeartbitPartionTable() bool {
+	return cm.dataSyncManager.CanSetPartitionTable()
+}
+
+func (cm *ClusterManager) GetCurrentNode() *Node {
+	return cm.currentNode
+}
+
+func (cm *ClusterManager) GetSystemDB() *storage.Collection {
+	return cm.systemDb
 }
 
 func (cm *ClusterManager) StartCommunications() chan actions.NodeActions {
@@ -92,6 +110,53 @@ func (cm *ClusterManager) Shutdown() {
 	cm.systemDb.Close()
 }
 
+func (cm *ClusterManager) GetServers() map[string]server.Server {
+	cm.sync.Lock()
+	defer cm.sync.Unlock()
+	return cm.servers
+
+}
+
+func (cm *ClusterManager) initServerList() {
+	cm.sync.Lock()
+	defer cm.sync.Unlock()
+	cm.servers = server.InitServerList(&cm.partitionTable)
+}
+
+func (cm *ClusterManager) UpdateServersHeartbitStatus() {
+	servers := cm.currentNode.GetHeartbitStatus()
+	cm.initServerList()
+	notifySyncManager := false
+	for sid, s := range cm.servers {
+		found := false
+		for _, hbs := range servers {
+			if hbs.NodeId == sid {
+				s.HeartbitStatus = hbs.HeartbitStatus
+				if s.PartitionTableTimestamp != hbs.PartitionTableTimestamp {
+					notifySyncManager = true
+				}
+				s.PartitionTableTimestamp = hbs.PartitionTableTimestamp
+				s.Memory = hbs.Memory
+				s.CPU = hbs.CPU
+				s.NumbOfVNodes = hbs.NumbOfVNodes
+
+				found = true
+			}
+		}
+
+		if !found {
+			s.HeartbitStatus = heartBitStatus.Failed
+		}
+
+		cm.servers[sid] = s
+	}
+
+	if notifySyncManager {
+		cm.dataSyncManager.VerifyClusterSyncWihtPartionTable()
+	}
+
+}
+
 func (cm *ClusterManager) JoinCluster(forceRejoin bool) error {
 
 	currentServer := cm.servers[cm.currentNode.GetId()]
@@ -99,6 +164,9 @@ func (cm *ClusterManager) JoinCluster(forceRejoin bool) error {
 	if currentServer.NodeId == cm.currentNode.GetId() {
 		//start heartbit manager
 		cm.currentNode.StartHeartbit()
+		if cm.CanSetHeartbitPartionTable() {
+			cm.currentNode.UpdateHeartbitPartitionTable(cm.partitionTable.Timestamp)
+		}
 		cm.currentServerStatus = serverStatus.Alive
 
 		servers := cm.currentNode.GetHeartbitStatus()
@@ -107,14 +175,10 @@ func (cm *ClusterManager) JoinCluster(forceRejoin bool) error {
 		remotePtTimestamp = 0
 		for _, s := range servers {
 			if s.NodeId != cm.currentNode.GetId() {
-				ptTimestamp, err := strconv.ParseInt(s.PartitionTable, 10, 64)
-				if err != nil {
-					fmt.Println("Cannot parse PT timestamp from " + s.NodeId + " (" + s.PartitionTable + "):" + err.Error())
-				} else {
-					if ptTimestamp > remotePtTimestamp {
-						nodeWithMostRecentPtTimestamp = s.NodeId
-						remotePtTimestamp = ptTimestamp
-					}
+				ptTimestamp := s.PartitionTableTimestamp
+				if ptTimestamp > remotePtTimestamp {
+					nodeWithMostRecentPtTimestamp = s.NodeId
+					remotePtTimestamp = ptTimestamp
 				}
 			}
 		}
@@ -134,7 +198,7 @@ func (cm *ClusterManager) JoinCluster(forceRejoin bool) error {
 					fmt.Println()
 					return errors.New("node not in the partition table")
 				} else if s.NodeId == "" {
-					//forceJoin
+					//forceJoin is set to true
 					err := cm.JoinClusterAsNewNode()
 					if err != nil {
 						return err
@@ -192,7 +256,8 @@ func (cm *ClusterManager) BootstrapNewNode() error {
 
 		//creating a brand new partition table
 		vnodes := partitioner.GenerateNewPartitionTable(conf.NUMB_VNODES, cm.currentNode.GetId(), cm.currentNode.NodeIp, cm.currentNode.NodePort)
-		err := cm.updatePartitionTable(partitioner.InitPartitionTable(*vnodes, time.Now().UnixMicro()))
+		//first time adding a pt
+		err := cm.initPartitionTable(partitioner.InitPartitionTable(*vnodes, time.Now().UnixMicro()))
 		if err != nil {
 			return err
 		}
@@ -227,17 +292,30 @@ func (cm *ClusterManager) JoinClusterAsNewNode() error {
 	return nil
 }
 
-func (cm *ClusterManager) updatePartitionTable(pt *partitioner.PartitionTable) error {
-	cm.partitionTable = *pt
-	cm.servers = server.InitServerList(&cm.partitionTable)
+func (cm *ClusterManager) initPartitionTable(pt *partitioner.PartitionTable) error {
 
+	cm.dataSyncManager.InitUpdatePartitionTableProcess(pt)
+	cm.partitionTable = *pt
 	err := cm.partitionTable.SaveToDb(cm.systemDb)
 	if err != nil {
 		//TODO: what to do here?
 		return err
 	}
 
+	cm.initServerList()
 	cm.currentServerStatus = serverStatus.Alive
+	cm.dataSyncManager.ProcessNextGetDataTask()
+
+	return nil
+}
+
+func (cm *ClusterManager) updatePartitionTable(pt *partitioner.PartitionTable) error {
+	err := cm.initPartitionTable(pt)
+
+	if err != nil {
+		return err
+	}
+
 	//notify current node
 	cm.nodeCummunicationChannel <- actions.NewPartitionTable
 
@@ -308,6 +386,10 @@ func (cm *ClusterManager) GetClusterStatus() []server.Server {
 
 }
 
+func (cm *ClusterManager) manageStartDataStreamRequest(toNodeId string, taskId string, from uint64, to uint64) {
+	cm.dataSyncManager.AddStreamingTask(taskId, toNodeId, from, to)
+}
+
 func (cm *ClusterManager) VerifyNodeCrash() {
 	//if temp Master crashed, we need to free the master role
 	servers := cm.currentNode.GetHeartbitStatus()
@@ -323,4 +405,17 @@ func (cm *ClusterManager) VerifyNodeCrash() {
 			}
 		}
 	}
+}
+
+func (cm *ClusterManager) NodeReadyForWork() {
+	cm.dataSyncManager.StartStreaming()
+	cm.dataSyncManager.ProcessNextGetDataTask()
+	cm.dataSyncManager.VerifyClusterSyncWihtPartionTable()
+}
+
+func (cm *ClusterManager) manageDataStreamChunk(fromNodeId string, taskId string, collectionName string, progress uint64, data []stream.StreamEntry) {
+	cm.dataSyncManager.SaveNewDataChunk(taskId, collectionName, progress, data)
+}
+func (cm *ClusterManager) manageDataStreamTaskCompleted(fromNodeId string, taskId string) {
+	cm.dataSyncManager.TaskCompleted(taskId)
 }

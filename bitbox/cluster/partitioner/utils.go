@@ -3,6 +3,7 @@ package partitioner
 import (
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"sort"
@@ -15,12 +16,13 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+// do not change this without extensive testing
 const REPLICATION_FACTOR = 3
 
 func GenerateNewPartitionTable(assignNumbVNodes int, nodeId string, nodeIp string, nodePort string) *[]VNode {
 	var vnodes []VNode
 
-	const max uint64 = 199 // math.MaxUint64 //18446744073709551615
+	const max uint64 = math.MaxUint64 //18446744073709551615 //199 //
 
 	var multiplier = max / uint64(assignNumbVNodes)
 
@@ -47,16 +49,11 @@ func GetRandom(max int) int {
 
 func UpdateReplication(nodesInClusterReplicationLoad *map[string]int, nodeId string, currentNodeReplication *[]string) {
 
-	//fmt.Println(nodeId, "#############")
-
 	var nodesInCluster = OrderInReverse(nodesInClusterReplicationLoad)
 
-	//fmt.Println(*currentNodeReplication)
 	var numberOfReplicas = REPLICATION_FACTOR - 1
 
 	var numberOfNodesInCluster = len(nodesInCluster)
-
-	//fmt.Println(numberOfNodesInCluster)
 
 	if numberOfNodesInCluster <= numberOfReplicas {
 		for _, v := range nodesInCluster {
@@ -76,8 +73,6 @@ func UpdateReplication(nodesInClusterReplicationLoad *map[string]int, nodeId str
 			dups[v] = true
 		}
 
-		//fmt.Println(dups)
-
 		for {
 			if len(tmp) < numberOfReplicas {
 				for _, v := range nodesInCluster {
@@ -92,12 +87,8 @@ func UpdateReplication(nodesInClusterReplicationLoad *map[string]int, nodeId str
 		}
 
 		*currentNodeReplication = tmp
-		//fmt.Println()
 	}
 
-	// fmt.Println(*currentNodeReplication)
-	// fmt.Println(nodeId, "#############")
-	//fmt.Println()
 }
 
 type entry struct {
@@ -124,14 +115,10 @@ func OrderInReverse(m *map[string]int) []string {
 	var onlyKeys = []string{}
 	for _, e := range es {
 		onlyKeys = append(onlyKeys, e.key)
-		//fmt.Printf("%q : %d\n", e.key, e.val)
 	}
 
-	//fmt.Println()
 	return onlyKeys
 }
-
-//////////////////
 
 func AddNode(oldPartionTable *[]VNode, assignNumbVNodes int, newNodeId string, newNodeIp string, newNodePort string) (*[]VNode, error) {
 
@@ -272,7 +259,6 @@ func rebalanceReplicas(newNodeId string, assignNumbVNodes int, newPartitionTable
 					if slices.Contains(v.ReplicatedTo, stealReplicaFrom) && !slices.Contains(v.ReplicatedTo, newNodeId) {
 
 						tmp := []string{}
-						//fmt.Println(v.VNodeID, "    ", v.ReplicatedTo)
 						for _, n := range v.ReplicatedTo {
 							if n == stealReplicaFrom {
 								tmp = append(tmp, newNodeId)
@@ -299,28 +285,10 @@ func rebalanceReplicas(newNodeId string, assignNumbVNodes int, newPartitionTable
 			}
 		}
 
-		// mm = make(map[string]int)
-
-		// for _, v := range *newPartitionTable {
-		// 	for _, n := range v.ReplicatedTo {
-		// 		mm[n]++
-		// 	}
-		// }
-
-		// fmt.Println()
-		// for k, e := range mm {
-		// 	fmt.Println(k, "    ", e)
-		// }
-
 	}
-
-	// fmt.Println()
 
 }
 
-// uses the fact that originally a node was inserted splitting the next node in the ring
-// this may not be exact, if the next node gets splitted again by another node but it should be ok
-// note also that a node gets inserted only one time => no 2 CONSECUTIVE vnodes should be ever assigned to the same node
 func RemoveNode(oldPartionTable *[]VNode, oldNodeId string) *[]VNode {
 
 	//calculate stats used to generate the PT (without the node to be removed)
@@ -427,7 +395,7 @@ func PrintDistribution(vnodes []VNode) {
 	fmt.Println()
 }
 
-func toString(v VNode) string {
+func VNodeToString(v VNode) string {
 	return "ST:\t" + strconv.FormatUint(v.StartToken, 10) + "-\t ET:\t" + strconv.FormatUint(v.EndToken, 10) + "-\t VN:\t" + v.VNodeID + "-\t PVN:\t" + v.PrevNodeID + "-\t PRT:\t" + strings.Join(v.PrevReplicatedTo, ",") + "-\t N:\t" + v.NodeId + "-\t RT:\t" + strings.Join(v.ReplicatedTo, ",") + "-"
 }
 

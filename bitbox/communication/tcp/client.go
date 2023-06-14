@@ -4,7 +4,7 @@ import (
 	"encoding/gob"
 	"net"
 
-	"github.com/lrondanini/bit-box/bitbox/actions"
+	"github.com/lrondanini/bit-box/bitbox/cluster/actions"
 )
 
 type TcpClientsManager struct {
@@ -17,7 +17,7 @@ func InitTcpClientsManager(nodeId string) *TcpClientsManager {
 	}
 }
 
-func (c *TcpClientsManager) SendMessage(toNodeId string, messageType MessageType, streamId uint8, streamPosition uint32, action actions.Action, body interface{}) (*Frame, error) {
+func (c *TcpClientsManager) SendMessage(toNodeId string, messageType MessageType, action actions.Action, body interface{}) (*Frame, error) {
 
 	serialiazedBody, e := EncodeBody(body)
 	if e != nil {
@@ -25,12 +25,10 @@ func (c *TcpClientsManager) SendMessage(toNodeId string, messageType MessageType
 	}
 
 	m := &Frame{
-		FromNodeId:     c.currentNodeId,
-		MessageType:    messageType,
-		StreamId:       streamId,
-		StreamPosition: streamPosition,
-		Action:         action,
-		Body:           serialiazedBody,
+		FromNodeId:  c.currentNodeId,
+		MessageType: messageType,
+		Action:      action,
+		Body:        serialiazedBody,
 	}
 
 	tcpAddr, tcpAddrErr := net.ResolveTCPAddr("tcp", toNodeId)

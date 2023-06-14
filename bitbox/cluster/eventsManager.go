@@ -1,27 +1,26 @@
 package cluster
 
 import (
-	"fmt"
 	"strconv"
 
+	"github.com/lrondanini/bit-box/bitbox/cluster/partitioner"
+	"github.com/lrondanini/bit-box/bitbox/cluster/stream"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
 	"github.com/lrondanini/bit-box/bitbox/communication"
 	"github.com/lrondanini/bit-box/bitbox/communication/tcp"
-	"github.com/lrondanini/bit-box/bitbox/partitioner"
+	"github.com/lrondanini/bit-box/bitbox/communication/types"
 
-	"github.com/lrondanini/bit-box/bitbox/actions"
+	"github.com/lrondanini/bit-box/bitbox/cluster/actions"
 )
 
 func CreateAckFrame(nodeId string) *tcp.Frame {
 	sb, _ := communication.SerialiazeBody("ack")
 	return &tcp.Frame{
-		FromNodeId:     nodeId,
-		MessageType:    tcp.Response,
-		StreamId:       0,
-		StreamPosition: 0,
-		Action:         actions.NoAction,
-		Error:          false,
-		Body:           sb,
+		FromNodeId:  nodeId,
+		MessageType: tcp.Response,
+		Action:      actions.NoAction,
+		Error:       false,
+		Body:        sb,
 	}
 }
 
@@ -69,6 +68,14 @@ func (em *EventsManager) HandleEvent(msg *tcp.MessageFromCluster) error {
 		em.onNodeBackOnlineNotification(&f, msg.ReplyToChannel)
 	case actions.ClusterStatusRequest:
 		em.onClusterStatusRequest(&f, msg.ReplyToChannel)
+	case actions.GetNodeStatsRequest:
+		em.onGetNodeStatsRequest(&f, msg.ReplyToChannel)
+	case actions.StartDataStreamRequest:
+		em.onStartDataStreamRequest(&f, msg.ReplyToChannel)
+	case actions.SendDataStreamChunk:
+		em.onSendDataStreamChunk(&f, msg.ReplyToChannel)
+	case actions.SendDataStreamTaskCompleted:
+		em.onSendDataStreamTaskCompleted(&f, msg.ReplyToChannel)
 
 	}
 
@@ -78,25 +85,21 @@ func (em *EventsManager) HandleEvent(msg *tcp.MessageFromCluster) error {
 func (em *EventsManager) newErrorFrame(action actions.Action, errorMessage string) *tcp.Frame {
 	sb, _ := communication.SerialiazeBody(errorMessage)
 	return &tcp.Frame{
-		FromNodeId:     em.nodeId,
-		MessageType:    tcp.Response,
-		StreamId:       0,
-		StreamPosition: 0,
-		Action:         action,
-		Error:          true,
-		Body:           sb,
+		FromNodeId:  em.nodeId,
+		MessageType: tcp.Response,
+		Action:      action,
+		Error:       true,
+		Body:        sb,
 	}
 }
 
 func (em *EventsManager) newFrame(action actions.Action, body string) *tcp.Frame {
 	return &tcp.Frame{
-		FromNodeId:     em.nodeId,
-		MessageType:    tcp.Response,
-		StreamId:       0,
-		StreamPosition: 0,
-		Action:         action,
-		Error:          false,
-		Body:           body,
+		FromNodeId:  em.nodeId,
+		MessageType: tcp.Response,
+		Action:      action,
+		Error:       false,
+		Body:        body,
 	}
 }
 
@@ -139,7 +142,7 @@ func (em *EventsManager) onJoinClusterRequest(f *tcp.Frame, replyToChannel chan 
 func (em *EventsManager) onDecommissionNodeRequest(f *tcp.Frame, replyToChannel chan tcp.Frame) {
 	req := make(map[string]string)
 	err := communication.DeserializeBody(f.Body, &req)
-	fmt.Println(req)
+
 	if err != nil {
 		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
 	} else {
@@ -218,4 +221,65 @@ func (em *EventsManager) onClusterStatusRequest(f *tcp.Frame, replyToChannel cha
 	servers := em.clusterManager.GetClusterStatus()
 	resBody, _ := communication.SerialiazeBody(servers)
 	replyToChannel <- *em.newFrame(actions.NoAction, resBody)
+}
+
+func (em *EventsManager) onGetNodeStatsRequest(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	stats := em.clusterManager.currentNode.GetStats()
+
+	statsPerCollection := make(map[string]types.CollectionStats)
+	for k, v := range stats.StatsPerCollection {
+		cs := types.CollectionStats{
+			CollectionName:  v.CollectionName,
+			NumberOfEntries: v.NumberOfEntries,
+			NumberOfUpserts: v.NumberOfUpserts,
+			NumberOfReads:   v.NumberOfReads,
+		}
+		statsPerCollection[k] = cs
+	}
+
+	res := types.NodeStatsResponse{
+		Collections:        stats.Collections,
+		StatsPerCollection: statsPerCollection,
+	}
+	resBody, _ := communication.SerialiazeBody(res)
+	replyToChannel <- *em.newFrame(actions.NoAction, resBody)
+}
+
+func (em *EventsManager) onStartDataStreamRequest(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	req := types.DataSyncTaskRequest{}
+	err := communication.DeserializeBody(f.Body, &req)
+
+	if err != nil {
+		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
+	} else {
+
+		em.clusterManager.manageStartDataStreamRequest(f.FromNodeId, req.TaskId, req.From, req.To)
+		replyToChannel <- *em.ackFrame
+	}
+}
+
+func (em *EventsManager) onSendDataStreamChunk(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	req := stream.StreamMessage{}
+	err := communication.DeserializeBody(f.Body, &req)
+
+	if err != nil {
+		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
+	} else {
+
+		em.clusterManager.manageDataStreamChunk(f.FromNodeId, req.TaskId, req.CollectionName, req.Progress, req.Data)
+		replyToChannel <- *em.ackFrame
+	}
+}
+
+func (em *EventsManager) onSendDataStreamTaskCompleted(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	taskId := ""
+	err := communication.DeserializeBody(f.Body, &taskId)
+
+	if err != nil {
+		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
+	} else {
+
+		em.clusterManager.manageDataStreamTaskCompleted(f.FromNodeId, taskId)
+		replyToChannel <- *em.ackFrame
+	}
 }

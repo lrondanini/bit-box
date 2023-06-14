@@ -68,3 +68,23 @@ func VerifyAndSetConfiguration(conf *Configuration) {
 
 	confInstance = *conf
 }
+
+func GetConfForTesting() *Configuration {
+	return &Configuration{
+		LOGGER:              &LoggerForTesting{},
+		LOG_GOSSIP_PROTOCOL: false,
+		LOG_STORAGE:         false,
+
+		NODE_IP:            "localhost",
+		NODE_PORT:          "9999",
+		NODE_HEARTBIT_PORT: "9998",
+
+		CLUSTER_NODE_IP:            "localhost",
+		CLUSTER_NODE_PORT:          "9997",
+		CLUSTER_NODE_HEARTBIT_PORT: "9996",
+
+		NUMB_VNODES: 4,
+
+		DATA_FOLDER: "/Users/lucarondanini/Desktop/BitBox/data/node-tests",
+	}
+}

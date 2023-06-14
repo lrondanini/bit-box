@@ -24,12 +24,12 @@ clusterNodeHeartbitPort: 2223
 #   LOGGING INFOS
 #***************************************
 # LOG_TO: console | file | both
-logTo: both
+logTo: console
 # LOG_LEVEL = trace | debug | info | warn | error | fatal | panic 
 # in order of verbosity from trace (max) to panic (min)
 logLevel: debug
 # LOG_GOSSIP_PROTOCOL: true | false 
-logGossipProtocol: true
+logGossipProtocol: false
 # LOG_STORAGE: true | false - to log messages from the stroage layer
 logStorage: false
 

@@ -18,6 +18,10 @@ const (
 	AbortPartitionTableChanges  //used to send messages to the requestor in case the op cannot be completed
 	NodeBackOnlineNotification  //sent to notify a node that the sender is back online
 	ClusterStatusRequest
+	GetNodeStatsRequest
+	StartDataStreamRequest //used during PT changes for sync
+	SendDataStreamChunk
+	SendDataStreamTaskCompleted
 )
 
 // actions sent from the cluster to the current node

@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/lrondanini/bit-box/bitbox/cluster/server"
+	"github.com/lrondanini/bit-box/bitbox/cluster/server/serverStatus/heartBitStatus"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
-	"github.com/lrondanini/bit-box/bitbox/serverStatus/heartBitStatus"
 
 	"github.com/hashicorp/serf/serf"
 )
@@ -62,7 +62,7 @@ func (h *HeartbitManager) Shutdown() {
 	h.serf.Shutdown()
 }
 
-func (h *HeartbitManager) JoinCluster(partitionTableTimestamp int64) {
+func (h *HeartbitManager) JoinCluster() {
 
 	logger := utils.GetLogger()
 
@@ -82,7 +82,6 @@ func (h *HeartbitManager) JoinCluster(partitionTableTimestamp int64) {
 			logger.Error(err, "Cannot start heartbit")
 		}
 
-		h.SetPartitionTableTimestamp(partitionTableTimestamp)
 		h.UpdateHardwareStats()
 		h.started = true
 
@@ -118,14 +117,22 @@ func (h *HeartbitManager) setTags() {
 func (h *HeartbitManager) GetServers() []server.Server {
 	var res []server.Server
 	for _, m := range h.serf.Members() {
+		ptTimestamp := int64(0)
+		if m.Tags["ptTimestamp"] != "" {
+			var err error
+			ptTimestamp, err = strconv.ParseInt(m.Tags["ptTimestamp"], 10, 64)
+			if err != nil {
+				ptTimestamp = int64(0)
+			}
+		}
 		res = append(res, server.Server{
-			NodeId:           m.Name,
-			NodeIp:           m.Addr.String(),
-			NodeHeartbitPort: strconv.FormatUint(uint64(m.Port), 10),
-			HeartbitStatus:   heartBitStatus.HeartBitStatus(m.Status),
-			PartitionTable:   m.Tags["ptTimestamp"],
-			Memory:           m.Tags["memory"],
-			CPU:              m.Tags["cpu"],
+			NodeId:                  m.Name,
+			NodeIp:                  m.Addr.String(),
+			NodeHeartbitPort:        strconv.FormatUint(uint64(m.Port), 10),
+			HeartbitStatus:          heartBitStatus.HeartBitStatus(m.Status),
+			PartitionTableTimestamp: ptTimestamp,
+			Memory:                  m.Tags["memory"],
+			CPU:                     m.Tags["cpu"],
 		})
 	}
 

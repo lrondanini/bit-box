@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/lrondanini/bit-box/bitbox/cluster/stream"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
 )
 
@@ -20,6 +21,11 @@ func DbGarbageCollector(db *badger.DB) {
 			db.RunValueLogGC(0.5)
 		}
 	}
+}
+
+type DbValue struct {
+	Hash  uint64
+	Value interface{}
 }
 
 type Collection struct {
@@ -111,6 +117,47 @@ func (c *Collection) LoadBackUp() {
 	// db.Load(fi, 16)
 }
 
+func (c *Collection) UpsertFromStreaming(data []stream.StreamEntry, updateStats func()) error {
+	txn := c.db.NewTransaction(true)
+
+	for _, entry := range data {
+
+		// node can accept writes while streaming/synching with the cluster,
+		// this means that if there is a value its newer than the one coming from the cluster
+		isNew := true
+		_, err := txn.Get(entry.Key)
+		if err != nil {
+			if err == ErrKeyNotFound {
+				isNew = false
+			}
+		}
+
+		if isNew {
+			if err := txn.Set(entry.Key, entry.Value); err == badger.ErrTxnTooBig {
+				_ = txn.Commit()
+				txn = c.db.NewTransaction(true)
+				_ = txn.Set(entry.Key, entry.Value)
+			}
+			updateStats()
+		}
+	}
+
+	_ = txn.Commit()
+	return nil
+}
+
+func (c *Collection) DeleteKeys(keys [][]byte, updateStats func()) error {
+	txn := c.db.NewTransaction(true)
+
+	for _, k := range keys {
+		txn.Delete(k)
+		updateStats()
+	}
+	_ = txn.Commit()
+
+	return nil
+}
+
 func (c *Collection) Set(k interface{}, v interface{}) error {
 
 	kBytes, err := ToBytes(k)
@@ -156,6 +203,28 @@ func (c *Collection) Get(k interface{}, v interface{}) error {
 	}
 
 	return nil
+}
+
+func (c *Collection) Exists(k interface{}) (bool, error) {
+	kBytes, err := ToBytes(k)
+
+	if err != nil {
+		return false, err
+	}
+
+	txn := c.db.NewTransaction(false)
+	defer txn.Discard()
+
+	// Use the transaction...
+	_, err = txn.Get(kBytes)
+	if err != nil {
+		if err == ErrKeyNotFound {
+			return true, nil
+		}
+		return false, err
+	}
+
+	return false, err
 }
 
 func (c *Collection) GetIterator() (*Iterator, error) {

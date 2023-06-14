@@ -8,6 +8,9 @@
 
 *.out
 
+.DS_Store
+
+
 # bit-box server folders
 data
 logs

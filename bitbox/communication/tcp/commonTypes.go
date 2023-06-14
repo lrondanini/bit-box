@@ -1,6 +1,6 @@
 package tcp
 
-import "github.com/lrondanini/bit-box/bitbox/actions"
+import "github.com/lrondanini/bit-box/bitbox/cluster/actions"
 
 type MessageType rune
 
@@ -10,13 +10,11 @@ const (
 )
 
 type Frame struct {
-	FromNodeId     string //id = ip:port
-	MessageType    MessageType
-	StreamId       uint8
-	StreamPosition uint32
-	Action         actions.Action
-	Error          bool
-	Body           string
+	FromNodeId  string //id = ip:port
+	MessageType MessageType
+	Action      actions.Action
+	Error       bool
+	Body        string
 }
 
 type MessageFromCluster struct {

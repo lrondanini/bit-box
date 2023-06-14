@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lrondanini/bit-box/bitbox/cluster/partitioner"
 	"github.com/lrondanini/bit-box/bitbox/cluster/server"
+	"github.com/lrondanini/bit-box/bitbox/cluster/server/serverStatus"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
-	"github.com/lrondanini/bit-box/bitbox/partitioner"
-	"github.com/lrondanini/bit-box/bitbox/serverStatus"
 )
 
 type TopologyManager struct {
