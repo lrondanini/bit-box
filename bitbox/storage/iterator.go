@@ -2,6 +2,8 @@ package storage
 
 import (
 	"bytes"
+	"errors"
+	"reflect"
 
 	"github.com/dgraph-io/badger/v4"
 )
@@ -131,6 +133,36 @@ func GetFilteredIterator(db *badger.DB, from interface{}, till interface{}) (*It
 	return res, nil
 }
 
+func GetIteratorFromRaw(db *badger.DB, from []byte) (*Iterator, error) {
+	txn := db.NewTransaction(false)
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchSize = 10
+	opts.PrefetchValues = false // key-only iteration. It is several order of magnitudes faster than regular iteration
+	//opts.Reverse = reverse
+
+	res := &Iterator{}
+
+	if len(from) > 0 {
+		res = &Iterator{
+			it:        txn.NewIterator(opts),
+			from:      from,
+			bytesFrom: from,
+			started:   false,
+		}
+
+		res.it.Seek(from)
+	} else {
+		res = &Iterator{
+			it:      txn.NewIterator(opts),
+			started: false,
+		}
+
+		res.it.Rewind() //to the top
+	}
+
+	return res, nil
+}
+
 func (i *Iterator) HasMore() bool {
 	it := i.it
 	if !i.started {
@@ -147,6 +179,19 @@ func (i *Iterator) HasMore() bool {
 }
 
 func (i *Iterator) Next(key interface{}, value interface{}) error {
+	vv := reflect.ValueOf(value)
+	kk := reflect.ValueOf(key)
+
+	if vv.Type().Kind() != reflect.Pointer || kk.Type().Kind() != reflect.Pointer {
+		if vv.Type().Kind() != reflect.Pointer && kk.Type().Kind() != reflect.Pointer {
+			return errors.New("attempt to decode into a non-pointer (key, value)")
+		} else if kk.Type().Kind() != reflect.Pointer {
+			return errors.New("attempt to decode into a non-pointer (key)")
+		} else {
+			return errors.New("attempt to decode into a non-pointer (value)")
+		}
+	}
+
 	it := i.it
 
 	var kBytes []byte
@@ -154,8 +199,9 @@ func (i *Iterator) Next(key interface{}, value interface{}) error {
 	if i.hasMore {
 		item := it.Item()
 		kBytes = item.Key()
+		v := DbValue{}
 		err := item.Value(func(vBytes []byte) error {
-			return DecodeValue(vBytes, value)
+			return DecodeValue(vBytes, &v)
 		})
 		if err != nil {
 			return err
@@ -165,6 +211,10 @@ func (i *Iterator) Next(key interface{}, value interface{}) error {
 		}
 
 		err = FromBytes(kBytes, key)
+		if err != nil {
+			return err
+		}
+		err = FromBytes(v.Value, value)
 		if err != nil {
 			return err
 		}
@@ -181,10 +231,6 @@ func (i *Iterator) NextRaw() (hash uint64, key []byte, value []byte, err error) 
 	if i.hasMore {
 		item := it.Item()
 		key = item.Key()
-		// err = item.Value(func(vBytes []byte) error {
-		// 	value = vBytes
-		// 	return nil
-		// })
 		err := item.Value(func(vBytes []byte) error {
 			value = vBytes
 			return DecodeValue(vBytes, &v)

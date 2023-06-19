@@ -14,6 +14,7 @@ import (
 	"github.com/lrondanini/bit-box/bitbox/cluster/stream"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
 	"github.com/lrondanini/bit-box/bitbox/communication"
+	"github.com/lrondanini/bit-box/bitbox/communication/types"
 	"github.com/lrondanini/bit-box/bitbox/storage"
 )
 
@@ -59,7 +60,7 @@ func InitClusterManager(currentNode *Node) (*ClusterManager, error) {
 	}
 	clusterManager.partitionTable = *pt
 
-	partitioner.PrintVnodes(pt.VNodes)
+	//partitioner.PrintVnodes(pt.VNodes)
 
 	clusterManager.servers = server.InitServerList(&clusterManager.partitionTable)
 
@@ -93,7 +94,7 @@ func (cm *ClusterManager) StartCommunications() chan actions.NodeActions {
 		for {
 			msg, ok := <-cm.commManager.ReceiverChannel /// msg is of type tcp.MessageFromCluster
 			if ok {
-				cm.eventsManager.HandleEvent(&msg)
+				go cm.eventsManager.HandleEvent(msg)
 			} else {
 				//channel closed
 				return
@@ -117,6 +118,12 @@ func (cm *ClusterManager) GetServers() map[string]server.Server {
 
 }
 
+func (cm *ClusterManager) UpdateServers(servers map[string]server.Server) {
+	cm.sync.Lock()
+	defer cm.sync.Unlock()
+	cm.servers = servers
+}
+
 func (cm *ClusterManager) initServerList() {
 	cm.sync.Lock()
 	defer cm.sync.Unlock()
@@ -127,7 +134,8 @@ func (cm *ClusterManager) UpdateServersHeartbitStatus() {
 	servers := cm.currentNode.GetHeartbitStatus()
 	cm.initServerList()
 	notifySyncManager := false
-	for sid, s := range cm.servers {
+	clusterServers := cm.GetServers()
+	for sid, s := range clusterServers {
 		found := false
 		for _, hbs := range servers {
 			if hbs.NodeId == sid {
@@ -148,8 +156,9 @@ func (cm *ClusterManager) UpdateServersHeartbitStatus() {
 			s.HeartbitStatus = heartBitStatus.Failed
 		}
 
-		cm.servers[sid] = s
+		clusterServers[sid] = s
 	}
+	cm.UpdateServers(clusterServers)
 
 	if notifySyncManager {
 		cm.dataSyncManager.VerifyClusterSyncWihtPartionTable()
@@ -159,7 +168,8 @@ func (cm *ClusterManager) UpdateServersHeartbitStatus() {
 
 func (cm *ClusterManager) JoinCluster(forceRejoin bool) error {
 
-	currentServer := cm.servers[cm.currentNode.GetId()]
+	servers := cm.GetServers()
+	currentServer := servers[cm.currentNode.GetId()]
 
 	if currentServer.NodeId == cm.currentNode.GetId() {
 		//start heartbit manager
@@ -237,7 +247,8 @@ func (cm *ClusterManager) BootstrapNewNode() error {
 		}
 		_, err := cm.commManager.SendPing(GenerateNodeId(conf.CLUSTER_NODE_IP, conf.CLUSTER_NODE_PORT))
 		if err != nil {
-			if len(cm.servers) == 0 {
+			servers := cm.GetServers()
+			if len(servers) == 0 {
 				//first node of a new cluster but conf has already set CLUSTER_NODE_IP
 				isFirstNode = true
 			} else {
@@ -295,7 +306,9 @@ func (cm *ClusterManager) JoinClusterAsNewNode() error {
 func (cm *ClusterManager) initPartitionTable(pt *partitioner.PartitionTable) error {
 
 	cm.dataSyncManager.InitUpdatePartitionTableProcess(pt)
+	cm.sync.Lock()
 	cm.partitionTable = *pt
+	cm.sync.Unlock()
 	err := cm.partitionTable.SaveToDb(cm.systemDb)
 	if err != nil {
 		//TODO: what to do here?
@@ -325,7 +338,8 @@ func (cm *ClusterManager) updatePartitionTable(pt *partitioner.PartitionTable) e
 func (cm *ClusterManager) StartAddNewNode(reqFromNodeId string, newNodeId string, newNodeIp string, newNodePort string, numberOfVNodes int) error {
 
 	//verify that newNodeId is not already in our cluster
-	if _, ok := cm.servers[newNodeId]; ok {
+	servers := cm.GetServers()
+	if _, ok := servers[newNodeId]; ok {
 		return errors.New("node " + newNodeId + " already in the cluster")
 	}
 
@@ -340,7 +354,8 @@ func (cm *ClusterManager) StartAddNewNode(reqFromNodeId string, newNodeId string
 func (cm *ClusterManager) StartDecommissionNode(reqFromNodeId, nodeId string) error {
 
 	//verify that newNodeId is in our cluster
-	if _, ok := cm.servers[nodeId]; !ok {
+	servers := cm.GetServers()
+	if _, ok := servers[nodeId]; !ok {
 		return errors.New("node " + nodeId + " not in the cluster")
 	}
 
@@ -377,8 +392,9 @@ func (cm *ClusterManager) manageCommitPartitionTableRequest(fromNodeId string) {
 func (cm *ClusterManager) GetClusterStatus() []server.Server {
 	var res []server.Server
 	servers := cm.currentNode.GetHeartbitStatus()
+	clusterServers := cm.GetServers()
 	for _, s := range servers {
-		cs := cm.servers[s.NodeId]
+		cs := clusterServers[s.NodeId]
 		s.NodePort = cs.NodePort
 		res = append(res, s)
 	}
@@ -413,9 +429,38 @@ func (cm *ClusterManager) NodeReadyForWork() {
 	cm.dataSyncManager.VerifyClusterSyncWihtPartionTable()
 }
 
-func (cm *ClusterManager) manageDataStreamChunk(fromNodeId string, taskId string, collectionName string, progress uint64, data []stream.StreamEntry) {
+func (cm *ClusterManager) manageDataStreamChunk(taskId string, collectionName string, progress uint64, data []stream.StreamEntry) {
 	cm.dataSyncManager.SaveNewDataChunk(taskId, collectionName, progress, data)
 }
+
 func (cm *ClusterManager) manageDataStreamTaskCompleted(fromNodeId string, taskId string) {
 	cm.dataSyncManager.TaskCompleted(taskId)
+}
+
+func (cm *ClusterManager) manageSendGetSyncTasks() types.DataSyncStatusResponse {
+	return cm.dataSyncManager.GetStatus()
+}
+
+func (cm *ClusterManager) manageRetrySyncTask(taskId string) {
+	cm.dataSyncManager.ForceRetryStreamingTask(taskId)
+}
+
+func (cm *ClusterManager) manageSet(fromNodeId string, collectionname string, key []byte, value []byte) error {
+	return cm.currentNode.UpsertRaw(fromNodeId, collectionname, key, value)
+}
+
+func (cm *ClusterManager) manageGet(collectionname string, key []byte) ([]byte, error) {
+	return cm.currentNode.GetRaw(collectionname, key)
+}
+
+func (cm *ClusterManager) manageDel(fromNodeId string, collectionname string, key []byte) error {
+	return cm.currentNode.DeleteRaw(fromNodeId, collectionname, key)
+}
+
+func (cm *ClusterManager) manageScan(collectionname string, startFromKey []byte, numberOfResults int) ([]types.RWRequest, error) {
+	return cm.currentNode.ScanRaw(collectionname, startFromKey, numberOfResults)
+}
+
+func (cm *ClusterManager) manageGetKeyLocation(key []byte) partitioner.HashLocation {
+	return cm.currentNode.GetKeyLocationInCluster(key)
 }

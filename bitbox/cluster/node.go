@@ -2,15 +2,11 @@ package cluster
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"reflect"
 
 	"github.com/lrondanini/bit-box/bitbox/cluster/actions"
-	"github.com/lrondanini/bit-box/bitbox/cluster/partitioner"
 	"github.com/lrondanini/bit-box/bitbox/cluster/server"
-	"github.com/lrondanini/bit-box/bitbox/cluster/stream"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
 	"github.com/lrondanini/bit-box/bitbox/storage"
 
@@ -139,9 +135,32 @@ func (n *Node) manageHeartbitEvents() {
 		r := <-n.heartbitManager.eventChannel
 
 		switch r.EventType() {
-		case serf.EventMemberLeave:
+		case serf.EventMemberFailed:
+			e, ok := r.(serf.MemberEvent)
+			if !ok {
+				continue
+			}
+
+			nodesThatFailed := []string{}
+			for _, member := range e.Members {
+				nodesThatFailed = append(nodesThatFailed, member.Name)
+			}
 			n.clusterManager.VerifyNodeCrash()
 			n.clusterManager.UpdateServersHeartbitStatus()
+			n.ManageNodesDown(nodesThatFailed)
+		case serf.EventMemberLeave:
+			e, ok := r.(serf.MemberEvent)
+			if !ok {
+				continue
+			}
+
+			nodesThatLeft := []string{}
+			for _, member := range e.Members {
+				nodesThatLeft = append(nodesThatLeft, member.Name)
+			}
+			n.clusterManager.VerifyNodeCrash()
+			n.clusterManager.UpdateServersHeartbitStatus()
+			n.ManageNodesDown(nodesThatLeft)
 		case serf.EventMemberJoin:
 			n.clusterManager.UpdateServersHeartbitStatus()
 		case serf.EventMemberUpdate:
@@ -149,7 +168,6 @@ func (n *Node) manageHeartbitEvents() {
 			if !ok {
 				continue
 			}
-
 			n.clusterManager.UpdateServersHeartbitStatus()
 
 		}
@@ -199,214 +217,6 @@ func (n *Node) manageHeartbitEvents() {
 	}
 }
 
-func (n *Node) Upsert(collectionName string, key interface{}, value interface{}) error {
+func (n *Node) ManageNodesDown(nodesWithProblems []string) {
 
-	bKey, err := storage.ToBytes(key)
-
-	if err != nil {
-		return err
-	}
-
-	hash := partitioner.GetHash(bKey)
-
-	//find WHERE to store this data
-	isLocal := true
-
-	if isLocal {
-		c, e := n.storageManager.GetCollection(collectionName)
-
-		if e != nil {
-			return e
-		}
-
-		isNew, _ := c.Exists(key)
-
-		v := storage.DbValue{
-			Hash:  hash,
-			Value: value,
-		}
-
-		c.Set(key, v)
-
-		ev := Event{
-			EventType:      UpsertEvent,
-			CollectionName: collectionName,
-			IsNew:          isNew,
-		}
-		n.nodeStats.Log(ev)
-	}
-
-	return nil
-}
-
-func (n *Node) upsertFromClusterStream(collectionName string, data []stream.StreamEntry) error {
-	c, e := n.storageManager.GetCollection(collectionName)
-	if e != nil {
-		return e
-	}
-
-	return c.UpsertFromStreaming(data, func() {
-		ev := Event{
-			EventType:      UpsertEvent,
-			CollectionName: collectionName,
-			IsNew:          true,
-		}
-		n.nodeStats.Log(ev)
-	})
-}
-
-func (n *Node) deleteForClusterSync(collectionName string, keys [][]byte) error {
-	c, e := n.storageManager.GetCollection(collectionName)
-	if e != nil {
-		return e
-	}
-
-	return c.DeleteKeys(keys, func() {
-		ev := Event{
-			EventType:      DeleteEvent,
-			CollectionName: collectionName,
-		}
-		n.nodeStats.Log(ev)
-	})
-}
-
-// used in .Get to set the value of the pointer
-func decAlloc(v reflect.Value) reflect.Value {
-	for v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			v.Set(reflect.New(v.Type().Elem()))
-		}
-		v = v.Elem()
-	}
-	return v
-}
-
-func (n *Node) Get(collectionName string, key interface{}, value interface{}) error {
-	vv := reflect.ValueOf(value)
-	if vv.Type().Kind() != reflect.Pointer {
-		return errors.New("attempt to decode into a non-pointer")
-	}
-
-	bKey, err := storage.ToBytes(key)
-
-	if err != nil {
-		return err
-	}
-
-	hash := partitioner.GetHash(bKey)
-
-	//find WHERE to get this data
-	isLocal := true
-
-	if isLocal {
-		c, e := n.storageManager.GetCollection(collectionName)
-
-		if e != nil {
-			return e
-		}
-
-		v := storage.DbValue{
-			Hash:  hash,
-			Value: value,
-		}
-
-		e = c.Get(key, &v)
-		if e != nil {
-			return e
-		}
-
-		decAlloc(vv).Set(reflect.ValueOf(v.Value))
-
-		ev := Event{
-			EventType:      ReadEvent,
-			CollectionName: collectionName,
-		}
-		n.nodeStats.Log(ev)
-
-	}
-
-	return nil
-}
-
-func (n *Node) Delete(collectionName string, key interface{}) error {
-	bKey, err := storage.ToBytes(key)
-
-	if err != nil {
-		return err
-	}
-
-	hash := partitioner.GetHash(bKey)
-
-	//find WHERE to get this data
-	isLocal := true
-
-	if hash > 0 {
-		isLocal = true
-	}
-
-	if isLocal {
-		c, e := n.storageManager.GetCollection(collectionName)
-
-		if e != nil {
-			return e
-		}
-
-		ev := Event{
-			EventType:      DeleteEvent,
-			CollectionName: collectionName,
-		}
-		n.nodeStats.Log(ev)
-
-		e = c.Delete(key)
-
-		if e != nil {
-			return e
-		}
-	}
-
-	return nil
-}
-
-func (n *Node) GetIterator(collectionName string) (*storage.Iterator, error) {
-	c, e := n.storageManager.GetCollection(collectionName)
-
-	if e != nil {
-		return nil, e
-	}
-
-	return c.GetIterator()
-}
-
-func (n *Node) GetIteratorFrom(collectionName string, from interface{}) (*storage.Iterator, error) {
-	c, e := n.storageManager.GetCollection(collectionName)
-
-	if e != nil {
-		return nil, e
-	}
-
-	return c.GetIteratorFrom(from)
-}
-
-func (n *Node) GetFilteredIterator(collectionName string, from interface{}, to interface{}) (*storage.Iterator, error) {
-	c, e := n.storageManager.GetCollection(collectionName)
-
-	if e != nil {
-		return nil, e
-	}
-
-	return c.GetFilteredIterator(from, to)
-}
-
-func (n *Node) DeleteCollection(collectionName string) error {
-	c, e := n.storageManager.GetCollection(collectionName)
-
-	if e != nil {
-		return e
-	}
-
-	return c.DeleteCollection()
-}
-
-func (n *Node) GetStats() *NodeStats {
-	return n.nodeStats
 }

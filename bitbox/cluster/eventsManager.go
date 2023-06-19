@@ -3,6 +3,7 @@ package cluster
 import (
 	"strconv"
 
+	"github.com/dgraph-io/badger/v4"
 	"github.com/lrondanini/bit-box/bitbox/cluster/partitioner"
 	"github.com/lrondanini/bit-box/bitbox/cluster/stream"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
@@ -41,8 +42,9 @@ func initEventsManager(nodeId string, clusterManager *ClusterManager) *EventsMan
 	return &eventsManager
 }
 
-func (em *EventsManager) HandleEvent(msg *tcp.MessageFromCluster) error {
+func (em *EventsManager) HandleEvent(msg tcp.MessageFromCluster) error {
 	f := msg.Frame
+
 	switch f.Action {
 	case actions.Ping:
 		em.onPing(&f, msg.ReplyToChannel)
@@ -76,7 +78,20 @@ func (em *EventsManager) HandleEvent(msg *tcp.MessageFromCluster) error {
 		em.onSendDataStreamChunk(&f, msg.ReplyToChannel)
 	case actions.SendDataStreamTaskCompleted:
 		em.onSendDataStreamTaskCompleted(&f, msg.ReplyToChannel)
-
+	case actions.SendGetSyncTasks:
+		em.onSendGetSyncTasks(&f, msg.ReplyToChannel)
+	case actions.RetrySyncTask:
+		em.onRetrySyncTask(&f, msg.ReplyToChannel)
+	case actions.Set:
+		em.onSet(&f, msg.ReplyToChannel)
+	case actions.Get:
+		em.onGet(&f, msg.ReplyToChannel)
+	case actions.Del:
+		em.onDel(&f, msg.ReplyToChannel)
+	case actions.Scan:
+		em.onScan(&f, msg.ReplyToChannel)
+	case actions.GetKeyLocation:
+		em.onGetKeyLocation(&f, msg.ReplyToChannel)
 	}
 
 	return nil
@@ -266,7 +281,7 @@ func (em *EventsManager) onSendDataStreamChunk(f *tcp.Frame, replyToChannel chan
 		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
 	} else {
 
-		em.clusterManager.manageDataStreamChunk(f.FromNodeId, req.TaskId, req.CollectionName, req.Progress, req.Data)
+		em.clusterManager.manageDataStreamChunk(req.TaskId, req.CollectionName, req.Progress, req.Data)
 		replyToChannel <- *em.ackFrame
 	}
 }
@@ -281,5 +296,108 @@ func (em *EventsManager) onSendDataStreamTaskCompleted(f *tcp.Frame, replyToChan
 
 		em.clusterManager.manageDataStreamTaskCompleted(f.FromNodeId, taskId)
 		replyToChannel <- *em.ackFrame
+	}
+}
+
+func (em *EventsManager) onSendGetSyncTasks(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	dst := em.clusterManager.manageSendGetSyncTasks()
+	resBody, _ := communication.SerialiazeBody(dst)
+	replyToChannel <- *em.newFrame(actions.NoAction, resBody)
+}
+
+func (em *EventsManager) onRetrySyncTask(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	taskId := ""
+	err := communication.DeserializeBody(f.Body, &taskId)
+
+	if err != nil {
+		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
+	} else {
+
+		em.clusterManager.manageRetrySyncTask(taskId)
+		replyToChannel <- *em.ackFrame
+	}
+}
+
+func (em *EventsManager) onSet(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	req := types.RWRequest{}
+	err := communication.DeserializeBody(f.Body, &req)
+
+	if err != nil {
+		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
+	} else {
+
+		err = em.clusterManager.manageSet(f.FromNodeId, req.Collection, req.Key, req.Value)
+		if err != nil {
+			replyToChannel <- *em.newErrorFrame(actions.NoAction, err.Error())
+		} else {
+			replyToChannel <- *em.ackFrame
+		}
+
+	}
+}
+
+func (em *EventsManager) onGet(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	req := types.RWRequest{}
+	err := communication.DeserializeBody(f.Body, &req)
+
+	if err != nil {
+		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
+	} else {
+		vBytes, err := em.clusterManager.manageGet(req.Collection, req.Key)
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				replyToChannel <- *em.newErrorFrame(actions.NoAction, "Not found")
+			} else {
+				replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse value: "+err.Error())
+			}
+		} else {
+			resBody, _ := communication.SerialiazeBody(vBytes)
+			replyToChannel <- *em.newFrame(actions.NoAction, resBody)
+		}
+
+	}
+}
+
+func (em *EventsManager) onDel(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	req := types.RWRequest{}
+	err := communication.DeserializeBody(f.Body, &req)
+
+	if err != nil {
+		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
+	} else {
+
+		em.clusterManager.manageDel(f.FromNodeId, req.Collection, req.Key)
+		replyToChannel <- *em.ackFrame
+	}
+}
+
+func (em *EventsManager) onScan(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	req := types.ScanRequest{}
+	err := communication.DeserializeBody(f.Body, &req)
+
+	if err != nil {
+		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
+	} else {
+
+		data, err := em.clusterManager.manageScan(req.Collection, req.StartFromKey, req.NumberOfResults)
+		if err != nil {
+			replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse results: "+err.Error())
+		} else {
+			resBody, _ := communication.SerialiazeBody(data)
+			replyToChannel <- *em.newFrame(actions.NoAction, resBody)
+		}
+	}
+}
+
+func (em *EventsManager) onGetKeyLocation(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	req := types.RWRequest{}
+	err := communication.DeserializeBody(f.Body, &req)
+
+	if err != nil {
+		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
+	} else {
+		loc := em.clusterManager.manageGetKeyLocation(req.Key)
+		resBody, _ := communication.SerialiazeBody(loc)
+		replyToChannel <- *em.newFrame(actions.NoAction, resBody)
 	}
 }

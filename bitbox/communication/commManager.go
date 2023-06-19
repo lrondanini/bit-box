@@ -297,3 +297,125 @@ func (c *CommunicationManager) SendDataStreamTaskCompleted(toNodeId string, task
 
 	return nil
 }
+
+func (c *CommunicationManager) SendGetSyncTasks(toNodeId string) (types.DataSyncStatusResponse, error) {
+
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.SendGetSyncTasks, "")
+
+	if err != nil {
+		return types.DataSyncStatusResponse{}, err
+	}
+
+	dss := types.DataSyncStatusResponse{}
+	DeserializeBody(reply.Body, &dss)
+
+	return dss, nil
+}
+
+func (c *CommunicationManager) SendRetrySyncTask(toNodeId string, taskId string) error {
+
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.RetrySyncTask, taskId)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *CommunicationManager) SendSet(toNodeId string, collectionName string, key []byte, value []byte) error {
+
+	req := types.RWRequest{
+		Collection: collectionName,
+		Key:        key,
+		Value:      value,
+	}
+
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.Set, req)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *CommunicationManager) SendGet(toNodeId string, collectionName string, key []byte) ([]byte, error) {
+
+	req := types.RWRequest{
+		Collection: collectionName,
+		Key:        key,
+	}
+
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.Get, req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if reply.Error {
+		var errMsg string
+		DeserializeBody(reply.Body, &errMsg)
+		return nil, errors.New(errMsg)
+	}
+
+	var res []byte
+	err = DeserializeBody(reply.Body, &res)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, err
+}
+
+func (c *CommunicationManager) SendDel(toNodeId string, collectionName string, key []byte) error {
+
+	req := types.RWRequest{
+		Collection: collectionName,
+		Key:        key,
+	}
+
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.Del, req)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *CommunicationManager) SendScan(toNodeId string, collectionName string, startFromKey []byte, numberOfResults int) ([]types.RWRequest, error) {
+
+	req := types.ScanRequest{
+		Collection:      collectionName,
+		StartFromKey:    startFromKey,
+		NumberOfResults: numberOfResults,
+	}
+
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.Scan, req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	res := []types.RWRequest{}
+	err = DeserializeBody(reply.Body, &res)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (c *CommunicationManager) SendGetKeyLocation(toNodeId string, key []byte) (partitioner.HashLocation, error) {
+	var res partitioner.HashLocation
+
+	req := types.RWRequest{
+		Key: key,
+	}
+
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.GetKeyLocation, req)
+
+	if err == nil {
+		err = DeserializeBody(reply.Body, &res)
+	}
+
+	return res, err
+}

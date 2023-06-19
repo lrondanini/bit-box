@@ -81,7 +81,8 @@ func (tm *TopologyManager) StartDecommissionNode(reqFromNodeId string, nodeId st
 		Status: serverStatus.Decommissioning,
 	}
 	found := false
-	for _, server := range tm.clusterManager.servers {
+	servers := tm.clusterManager.GetServers()
+	for _, server := range servers {
 		if server.NodeId == nodeId {
 			s.NodeIp = server.NodeIp
 			s.NodePort = server.NodePort
@@ -103,7 +104,8 @@ func (tm *TopologyManager) NotifyNodeStartup(nodeId string, nodeIp string, nodeP
 	nodeWithMostRecentPtTimestamp := ""
 	var remotePtTimestamp int64
 	remotePtTimestamp = 0
-	for _, server := range tm.clusterManager.servers {
+	servers := tm.clusterManager.GetServers()
+	for _, server := range servers {
 		if server.NodeId != tm.clusterManager.currentNode.GetId() {
 			ptTimestamp, err := tm.clusterManager.commManager.SendNodeBackOnlineNotification(server.NodeId)
 
@@ -197,7 +199,8 @@ func (tm *TopologyManager) changeClusterTopology(s server.Server) {
 func (tm *TopologyManager) startBecomeMasterProcedure(nodeRequestingId string) bool {
 	tm.waitForMasterRelease = false
 	allTimestamps := make(map[string]int64)
-	for _, server := range tm.clusterManager.servers {
+	servers := tm.clusterManager.GetServers()
+	for _, server := range servers {
 		if server.NodeId != tm.clusterManager.currentNode.GetId() && server.NodeId != nodeRequestingId {
 			accepted, ptTimestamp, err := tm.clusterManager.commManager.SendRequestToBecomeMaster(server.NodeId)
 			if err != nil {
@@ -361,7 +364,8 @@ func (tm *TopologyManager) manageUpdatePartitionTableRequest(newPartitionTable *
 }
 
 func (tm *TopologyManager) broadcastReleaseMaster(nodeRequestingId string) {
-	for _, server := range tm.clusterManager.servers {
+	servers := tm.clusterManager.GetServers()
+	for _, server := range servers {
 		if server.NodeId != tm.clusterManager.currentNode.GetId() && server.NodeId != nodeRequestingId {
 			err := tm.clusterManager.commManager.SendReleaseMasterRequest(server.NodeId)
 			if err != nil {

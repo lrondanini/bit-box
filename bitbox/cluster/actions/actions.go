@@ -22,6 +22,13 @@ const (
 	StartDataStreamRequest //used during PT changes for sync
 	SendDataStreamChunk
 	SendDataStreamTaskCompleted
+	SendGetSyncTasks //used to request list of sync tasks from a node
+	RetrySyncTask
+	Set
+	Get
+	Del
+	Scan
+	GetKeyLocation
 )
 
 // actions sent from the cluster to the current node

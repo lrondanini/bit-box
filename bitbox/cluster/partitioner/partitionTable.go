@@ -23,6 +23,10 @@ func GenerateUUID() string {
 	return uuid.New().String()
 }
 
+type HashLocation struct {
+	Master   string
+	Replicas []string
+}
 type PartitionTable struct {
 	VNodes    []VNode `json:"vNodes"`
 	Timestamp int64   `json:"timstamp"`
@@ -59,4 +63,15 @@ func (pt *PartitionTable) SaveToDb(systemDb *storage.Collection) error {
 func (pt *PartitionTable) PrintToStdOut() {
 	fmt.Println("Timestamp: ", pt.Timestamp)
 	PrintVnodes(pt.VNodes)
+}
+
+func (pt *PartitionTable) GetLocation(hash uint64) HashLocation {
+	res := HashLocation{}
+	for _, v := range pt.VNodes {
+		if v.StartToken <= hash && v.EndToken >= hash {
+			res.Master = v.NodeId
+			res.Replicas = v.ReplicatedTo
+		}
+	}
+	return res
 }

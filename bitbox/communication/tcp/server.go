@@ -82,6 +82,7 @@ func (s *TcpServer) Run() chan MessageFromCluster {
 			if err != nil {
 				select {
 				case <-s.quit:
+					handlers.Wait()
 					return
 				default:
 					s.logger.Error(err, "TCP Server error")
@@ -116,7 +117,6 @@ func (s *TcpServer) handleRequest(conn net.Conn) {
 		}
 		s.nodeCommChannel <- msg
 		response := <-replyTo
-
 		encoder := gob.NewEncoder(conn)
 		encoder.Encode(response)
 	}

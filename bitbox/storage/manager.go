@@ -36,18 +36,18 @@ func (db *StorageManager) GetCollection(collectionName string) (*Collection, err
 
 	db.sync.Lock()
 	res := db.collections[collectionName]
-	db.sync.Unlock()
+
 	if res == nil {
 		cn, err := OpenCollection(collectionName)
 		if err != nil {
 			fmt.Println(err)
 			return nil, err
 		}
-		db.sync.Lock()
+
 		db.collections[collectionName] = cn
 		res = db.collections[collectionName]
-		db.sync.Unlock()
 	}
+	db.sync.Unlock()
 
 	if res == nil {
 		return nil, ErrCollectionNotFound

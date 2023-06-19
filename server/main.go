@@ -82,20 +82,26 @@ func main() {
 		// onReadyChan := make(chan bool)
 		// go bitBox.Start(forceRejoin, onReadyChan)
 		// <-onReadyChan
-		// // bitBox.Upsert("tasks", "key1", "one")
-		// // bitBox.Upsert("tasks", "key2", "two")
-		// // s := ""
-		// // bitBox.Get("tasks", "key1", &s)
-		// // fmt.Println(1, s)
+		// bitBox.Upsert("tasks", "key1", "one")
+		// bitBox.Upsert("tasks", "key2", "two")
+		// s := ""
+		// bitBox.Get("tasks", "key1", &s)
+		// fmt.Println(1, s)
+
 		// it, e := bitBox.GetIterator("tasks")
 
 		// if e != nil {
+		// 	fmt.Println(e)
 		// } else {
-		// 	var k, v []byte
-		// 	var hash uint64
+		// 	var k, v string
 		// 	for it.HasMore() {
-		// 		hash, k, v, _ = it.NextRaw()
-		// 		fmt.Println(hash, k, v)
+		// 		err := it.Next(&k, &v)
+		// 		if err != nil {
+		// 			fmt.Println(err)
+		// 		} else {
+		// 			fmt.Println(k, v)
+		// 		}
+
 		// 	}
 		// }
 		// <-onReadyChan

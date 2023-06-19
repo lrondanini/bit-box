@@ -30,6 +30,7 @@ int (32 or 64 bits)
 unix timestamp = int64 (64 bits)
 */
 
+// Encodes to bynary preserving order
 func ToBytes(i interface{}) (k []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {

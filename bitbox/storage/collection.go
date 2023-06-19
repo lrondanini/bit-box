@@ -24,8 +24,9 @@ func DbGarbageCollector(db *badger.DB) {
 }
 
 type DbValue struct {
-	Hash  uint64
-	Value interface{}
+	Hash      uint64
+	Timestamp int64
+	Value     []byte
 }
 
 type Collection struct {
@@ -117,11 +118,10 @@ func (c *Collection) LoadBackUp() {
 	// db.Load(fi, 16)
 }
 
-func (c *Collection) UpsertFromStreaming(data []stream.StreamEntry, updateStats func()) error {
+func (c *Collection) UpsertFromStreaming(data []stream.StreamEntry, updateStats func()) {
 	txn := c.db.NewTransaction(true)
 
 	for _, entry := range data {
-
 		// node can accept writes while streaming/synching with the cluster,
 		// this means that if there is a value its newer than the one coming from the cluster
 		isNew := true
@@ -132,18 +132,20 @@ func (c *Collection) UpsertFromStreaming(data []stream.StreamEntry, updateStats 
 			}
 		}
 
-		if isNew {
-			if err := txn.Set(entry.Key, entry.Value); err == badger.ErrTxnTooBig {
+		if !isNew {
+			err := txn.Set(entry.Key, entry.Value)
+			if err == badger.ErrTxnTooBig {
 				_ = txn.Commit()
 				txn = c.db.NewTransaction(true)
 				_ = txn.Set(entry.Key, entry.Value)
 			}
 			updateStats()
 		}
+
 	}
 
 	_ = txn.Commit()
-	return nil
+
 }
 
 func (c *Collection) DeleteKeys(keys [][]byte, updateStats func()) error {
@@ -172,7 +174,7 @@ func (c *Collection) Set(k interface{}, v interface{}) error {
 		return err
 	}
 
-	return c._set(kBytes, vBytes)
+	return c.SetRaw(kBytes, vBytes)
 }
 
 func (c *Collection) Get(k interface{}, v interface{}) error {
@@ -189,7 +191,7 @@ func (c *Collection) Get(k interface{}, v interface{}) error {
 		return err
 	}
 
-	vBytes, err := c._get(kBytes)
+	vBytes, err := c.GetRaw(kBytes)
 
 	if err != nil {
 		return err
@@ -205,26 +207,20 @@ func (c *Collection) Get(k interface{}, v interface{}) error {
 	return nil
 }
 
-func (c *Collection) Exists(k interface{}) (bool, error) {
-	kBytes, err := ToBytes(k)
-
-	if err != nil {
-		return false, err
-	}
-
+func (c *Collection) Exists(key []byte) (bool, error) {
 	txn := c.db.NewTransaction(false)
 	defer txn.Discard()
 
 	// Use the transaction...
-	_, err = txn.Get(kBytes)
+	_, err := txn.Get(key)
 	if err != nil {
 		if err == ErrKeyNotFound {
-			return true, nil
+			return false, nil
 		}
 		return false, err
 	}
 
-	return false, err
+	return true, err
 }
 
 func (c *Collection) GetIterator() (*Iterator, error) {
@@ -239,6 +235,10 @@ func (c *Collection) GetFilteredIterator(from interface{}, till interface{}) (*I
 	return GetFilteredIterator(c.db, from, till)
 }
 
+func (c *Collection) GetIteratorFromRaw(from []byte) (*Iterator, error) {
+	return GetIteratorFromRaw(c.db, from)
+}
+
 func (c *Collection) Delete(k interface{}) error {
 
 	kBytes, err := ToBytes(k)
@@ -247,10 +247,10 @@ func (c *Collection) Delete(k interface{}) error {
 		return err
 	}
 
-	return c._delete(kBytes)
+	return c.DeleteRaw(kBytes)
 }
 
-func (c *Collection) _set(k []byte, v []byte) error {
+func (c *Collection) SetRaw(k []byte, v []byte) error {
 	if len(k) == 0 {
 		return errors.New("key cannot be empty")
 	}
@@ -277,7 +277,7 @@ func (c *Collection) _set(k []byte, v []byte) error {
 	return nil
 }
 
-func (c *Collection) _get(k []byte) ([]byte, error) {
+func (c *Collection) GetRaw(k []byte) ([]byte, error) {
 	txn := c.db.NewTransaction(false)
 	defer txn.Discard()
 
@@ -297,7 +297,7 @@ func (c *Collection) _get(k []byte) ([]byte, error) {
 	return valCopy, err
 }
 
-func (c *Collection) _delete(k []byte) error {
+func (c *Collection) DeleteRaw(k []byte) error {
 	txn := c.db.NewTransaction(true)
 
 	err := txn.Delete(k)

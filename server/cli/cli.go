@@ -184,6 +184,64 @@ func (cli *CLI) Run() {
 				} else {
 					cli.GetNodeStats("")
 				}
+			case "sync-status", "ss":
+				if len(uInput.params) > 0 {
+					cli.GetNodeSyncStatus(uInput.params[0])
+				} else {
+					cli.GetNodeSyncStatus("")
+				}
+			case "retry-sync-task", "rst":
+				if len(uInput.params) == 1 {
+					cli.RetrySyncTask(uInput.params[0])
+				} else {
+					fmt.Println("Wrong number of parameters, requires task-id")
+				}
+
+			case "set":
+				if len(uInput.params) == 3 {
+					cli.PerformSet(uInput.params[0], uInput.params[1], uInput.params[2])
+				} else {
+					fmt.Println("Wrong number of parameters")
+				}
+			case "get":
+				if len(uInput.params) == 2 {
+					cli.PerformGet(uInput.params[0], uInput.params[1])
+				} else {
+					fmt.Println("Wrong number of parameters")
+				}
+			case "del":
+				if len(uInput.params) == 2 {
+					cli.PerformDel(uInput.params[0], uInput.params[1])
+				} else {
+					fmt.Println("Wrong number of parameters")
+				}
+			case "scan":
+				if len(uInput.params) >= 1 {
+					if len(uInput.params) == 1 {
+						cli.PerformScan(uInput.params[0], "", 0, false, "")
+					} else if len(uInput.params) == 2 {
+						cli.PerformScan(uInput.params[0], uInput.params[1], 0, false, "")
+					} else if len(uInput.params) == 3 {
+						n, e := strconv.Atoi(uInput.params[2])
+						if e != nil {
+							fmt.Println(e)
+						} else {
+							cli.PerformScan(uInput.params[0], uInput.params[1], n, false, "")
+						}
+					}
+				} else {
+					fmt.Println("Wrong number of parameters")
+				}
+			case "locate", "loc":
+				if len(uInput.params) == 1 {
+					cli.PerformLocate(uInput.params[0])
+				} else {
+					fmt.Println("Wrong number of parameters")
+				}
+			case "test":
+				cli.PerformSet("dogs", "pluto", "one")
+				cli.PerformSet("dogs", "pippo", "two")
+				cli.PerformSet("dogs", "paperino", "three")
 			default:
 				if uInput.cmd != "" {
 					fmt.Println("Unknown command: " + uInput.cmd)
@@ -193,6 +251,33 @@ func (cli *CLI) Run() {
 			}
 		}
 	}
+}
+
+func (cli *CLI) PrintHelp() {
+	fmt.Println()
+	writer := tabwriter.NewWriter(os.Stdout, 0, 8, 1, '\t', tabwriter.AlignRight)
+	fmt.Fprintln(writer, "(short)\tCOMMAND\tPARAMETERS\tDESCRIPTION")
+	fmt.Fprintln(writer, "\t\t\t")
+	fmt.Fprintln(writer, "(h)\thelp\t\tShow this help")
+	fmt.Fprintln(writer, "(e,q)\texit, quit\t\tClose the cli")
+	fmt.Fprintln(writer, "(p)\tping\t\tVerify connection with cluster node")
+	fmt.Fprintln(writer, "(c)\tconf-cli\t\tView and/or configure the cli connection to the cluster")
+	fmt.Fprintln(writer, "\t\t\t")
+	fmt.Fprintln(writer, "(s)\tstatus\t\tShow clusters status")
+	fmt.Fprintln(writer, "(nl)\tnodes-list\t\tLists all the nodes in the cluster")
+	fmt.Fprintln(writer, "(ns)\tnode-stats\t[node-id]\tReturns stats for a specific node, if node-id is empty will prompt a list of nodes to choose from")
+	fmt.Fprintln(writer, "(rn)\tremove-node\t[node-id]\tDecommissions a node from the cluster, if node-id is empty will prompt a list of nodes to choose from")
+	fmt.Fprintln(writer, "(pt)\tpartition-table\t\tShow tokens distribution among nodes")
+	fmt.Fprintln(writer, "(ss)\tsync-status\t[node-id]\tShow sync status for node if node-id is empty will prompt a list of nodes to choose from")
+	fmt.Fprintln(writer, "(rst)\tretry-sync-task\ttask-id\tRetry sync task with task-id (helpful when a node is stuck in sync for crashes or net partitions)")
+	fmt.Fprintln(writer, "\t\t\t")
+	fmt.Fprintln(writer, "\tset\tcollection key value\tSet key to value for collection")
+	fmt.Fprintln(writer, "\tget\tcollection key\tGet key value from collection")
+	fmt.Fprintln(writer, "\tdel\tcollection key\tDelete key from collection")
+	fmt.Fprintln(writer, "\tscan\tcollection [key] [size]\tScan node's content starting from key and retrieving size results per fetch")
+	fmt.Fprintln(writer, "(loc)\tlocate\tkey\tReturns information about the node that owns the key")
+	writer.Flush()
+	fmt.Println()
 }
 
 func (cli *CLI) PingClusterNode() {
@@ -327,25 +412,6 @@ func (cli *CLI) saveCmdHistory() {
 	if err != nil {
 		fmt.Println("Could not save cmd history: " + err.Error())
 	}
-}
-
-func (cli *CLI) PrintHelp() {
-	fmt.Println()
-	writer := tabwriter.NewWriter(os.Stdout, 0, 8, 1, '\t', tabwriter.AlignRight)
-	fmt.Fprintln(writer, "(short)\tCOMMAND\tPARAMETERS\tDESCRIPTION")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "(h)\thelp\t\tShow this help")
-	fmt.Fprintln(writer, "(e,q)\texit, quit\t\tClose the cli")
-	fmt.Fprintln(writer, "(p)\tping\t\tVerify connection with cluster node")
-	fmt.Fprintln(writer, "(c)\tconf-cli\t\tView and/or configure the cli connection to the cluster")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "(s)\tstatus\t\tShow clusters status")
-	fmt.Fprintln(writer, "(nl)\tnodes-list\t\tLists all the nodes in the cluster")
-	fmt.Fprintln(writer, "(ns)\tnode-stats\t[node-id]\tReturns stats for a specific node, if node-id is empty will prompt a list of nodes to choose from")
-	fmt.Fprintln(writer, "(rn)\tremove-node\t[node-id]\tDecommissions a node from the cluster, if node-id is empty will prompt a list of nodes to choose from")
-	fmt.Fprintln(writer, "(pt)\tpartition-table\t\tShow tokens distribution among nodes")
-	writer.Flush()
-	fmt.Println()
 }
 
 func (cli *CLI) PrintPartitionTable() {
@@ -571,4 +637,212 @@ func (cli *CLI) PrintClusterStatus() {
 	}
 
 	fmt.Println(t.Render())
+}
+
+func (cli *CLI) GetNodeSyncStatus(nodeId string) {
+	var err error
+
+	if nodeId == "" {
+		nodeId, err = cli.SelectNode()
+		if err != nil {
+			fmt.Println("Error: " + err.Error())
+			return
+		}
+	}
+
+	var stats types.DataSyncStatusResponse
+	stats, err = cli.cluster.CommManager.SendGetSyncTasks(nodeId)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	t := table.NewWriter()
+
+	nothingToDo := true
+	if len(stats.JobsQueue) > 0 {
+		nothingToDo = false
+
+		for _, job := range stats.JobsQueue {
+
+			wfd := ""
+			if job.WaitingToStartDelete {
+				wfd = "Waiting to process deletes"
+			}
+			t.AppendRow(table.Row{job.PartitionTableTimestamp, wfd})
+
+			t.AppendRow(table.Row{"TaskId", "Action", "Status", "FromNodeId", "ToNodeId", "Progress", "ProgressCollection", "StartToken", "EndToken", "Error"})
+			for _, task := range job.SynchTasks {
+				t.AppendRow(table.Row{task.ID, task.Action, task.Status, task.FromNodeId, task.ToNodeId, task.Progress, task.ProgressCollection, task.StartToken, task.EndToken, task.Error})
+			}
+		}
+	}
+
+	if len(stats.StreamingQueue) > 0 {
+		nothingToDo = false
+		t.AppendRow(table.Row{"Streaming Queue:"})
+		t.AppendRow(table.Row{"TaskId", "Action", "Status", "FromNodeId", "ToNodeId", "Progress", "ProgressCollection", "StartToken", "EndToken", "Error"})
+		for _, task := range stats.StreamingQueue {
+			t.AppendRow(table.Row{task.ID, task.Action, task.Status, task.FromNodeId, task.ToNodeId, task.Progress, task.ProgressCollection, task.StartToken, task.EndToken, task.Error})
+		}
+	}
+
+	if nothingToDo {
+		fmt.Println("No sync tasks running")
+	} else {
+		fmt.Println(t.Render())
+	}
+
+}
+
+func (cli *CLI) RetrySyncTask(taskId string) {
+
+	nodeId, err := cli.SelectNode()
+	if err != nil {
+		fmt.Println("Error: " + err.Error())
+		return
+	}
+
+	if taskId == "" {
+		fmt.Println("TaskId is required")
+	} else {
+		err = cli.cluster.CommManager.SendRetrySyncTask(nodeId, taskId)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println("OK")
+		}
+	}
+
+}
+
+func (cli *CLI) PerformSet(collectionName string, key string, value string) {
+	remoteNodeId, err1 := cli.GetClusterNodeId()
+
+	if err1 != nil {
+		fmt.Println("Error: " + err1.Error())
+		return
+	}
+	err := cli.cluster.CommManager.SendSet(remoteNodeId, collectionName, []byte(key), []byte(value))
+	if err != nil {
+		fmt.Println("Error: " + err.Error())
+	} else {
+		fmt.Println("OK")
+	}
+}
+
+func (cli *CLI) PerformGet(collectionName string, key string) {
+	remoteNodeId, err1 := cli.GetClusterNodeId()
+
+	if err1 != nil {
+		fmt.Println("Error: " + err1.Error())
+		return
+	}
+
+	resBytes, err := cli.cluster.CommManager.SendGet(remoteNodeId, collectionName, []byte(key))
+	if err != nil {
+		if err.Error() == "Not found" {
+			fmt.Println("Not found")
+		} else {
+			fmt.Println("Error: " + err.Error())
+		}
+
+	} else {
+		if len(resBytes) > 0 {
+			fmt.Println(string(resBytes))
+		} else {
+			fmt.Println()
+		}
+
+	}
+}
+
+func (cli *CLI) PerformDel(collectionName string, key string) {
+	remoteNodeId, err1 := cli.GetClusterNodeId()
+
+	if err1 != nil {
+		fmt.Println("Error: " + err1.Error())
+		return
+	}
+
+	err := cli.cluster.CommManager.SendDel(remoteNodeId, collectionName, []byte(key))
+	if err != nil {
+		fmt.Println("Error: " + err.Error())
+	} else {
+		fmt.Println("OK")
+	}
+}
+
+func (cli *CLI) PerformScan(collectionName string, startFromKey string, numberOfResults int, skipFirst bool, nodeId string) {
+	var err error
+	if nodeId == "" {
+		nodeId, err = cli.SelectNode()
+		if err != nil {
+			fmt.Println("Error: " + err.Error())
+			return
+		}
+
+	}
+
+	data, err := cli.cluster.CommManager.SendScan(nodeId, collectionName, []byte(startFromKey), numberOfResults)
+	if err != nil {
+		fmt.Println("Error: " + err.Error())
+	} else {
+		if len(data) == 0 {
+			fmt.Println(collectionName + " scan completed from " + nodeId)
+		} else {
+			t := table.NewWriter()
+			t.AppendHeader(table.Row{"Key", "Value"})
+			latestKey := ""
+			hasData := false
+			for _, item := range data {
+				if skipFirst {
+					skipFirst = false
+				} else {
+					hasData = true
+					latestKey = string(item.Key)
+					t.AppendRow(table.Row{latestKey, string(item.Value)})
+				}
+			}
+
+			if hasData {
+				fmt.Println()
+				fmt.Println(t.Render())
+
+				fmt.Print("Press enter to continue, or q to exit...")
+				reader := bufio.NewReader(os.Stdin)
+				text, _ := reader.ReadString('\n')
+				ui := strings.Replace(text, "\n", "", -1)
+				if ui == "q" {
+					return
+				} else {
+					cli.PerformScan(collectionName, latestKey, numberOfResults, true, nodeId)
+				}
+			} else {
+				fmt.Println(collectionName + " scan completed from " + nodeId)
+			}
+
+		}
+
+	}
+}
+
+func (cli *CLI) PerformLocate(key string) {
+	remoteNodeId, err1 := cli.GetClusterNodeId()
+
+	if err1 != nil {
+		fmt.Println("Error: " + err1.Error())
+		return
+	}
+
+	loc, err := cli.cluster.CommManager.SendGetKeyLocation(remoteNodeId, []byte(key))
+	if err != nil {
+		fmt.Println("Error: " + err.Error())
+	} else {
+		fmt.Println("Master: " + loc.Master)
+		for _, r := range loc.Replicas {
+			fmt.Println("Replica: " + r)
+		}
+	}
 }

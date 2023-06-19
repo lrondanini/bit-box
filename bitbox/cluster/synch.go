@@ -6,6 +6,7 @@ import (
 
 	"github.com/lrondanini/bit-box/bitbox/cluster/partitioner"
 	"github.com/lrondanini/bit-box/bitbox/cluster/stream"
+	"github.com/lrondanini/bit-box/bitbox/communication/types"
 	"github.com/lrondanini/bit-box/bitbox/storage"
 )
 
@@ -77,6 +78,41 @@ func (dsm *DataSyncManager) CanSetPartitionTable() bool {
 	return canSet
 }
 
+func (dsm *DataSyncManager) WaitingForData(hash uint64) (bool, string) {
+	dsm.syncMutex.Lock()
+	defer dsm.syncMutex.Unlock()
+	for _, job := range dsm.jobsQueue {
+		for _, task := range job.SynchTasks {
+			if task.Action == partitioner.SendData || task.Action == partitioner.SendDataForReplication {
+				if task.StartToken <= hash && hash <= task.EndToken {
+					return true, task.ToNodeId
+				}
+			}
+		}
+	}
+
+	return false, ""
+}
+
+func (dsm *DataSyncManager) GetStatus() types.DataSyncStatusResponse {
+	jobsQueue := []types.DataSyncJob{}
+	dsm.syncMutex.Lock()
+	for _, job := range dsm.jobsQueue {
+		j := types.DataSyncJob{
+			PartitionTableTimestamp: job.PartitionTable.Timestamp,
+			WaitingToStartDelete:    job.WaitingToStartDelete,
+			GoDelete:                job.GoDelete,
+		}
+		j.SynchTasks = append(j.SynchTasks, job.SynchTasks...)
+		jobsQueue = append(jobsQueue, j)
+	}
+	dsm.syncMutex.Unlock()
+	return types.DataSyncStatusResponse{
+		JobsQueue:      jobsQueue,
+		StreamingQueue: dsm.streamingQueue,
+	}
+}
+
 func (dsm *DataSyncManager) InitUpdatePartitionTableProcess(pt *partitioner.PartitionTable) error {
 	newJob := DataSyncJob{
 		PartitionTable: *pt,
@@ -100,6 +136,11 @@ func (dsm *DataSyncManager) InitUpdatePartitionTableProcess(pt *partitioner.Part
 		dsm.jobsQueue = append(dsm.jobsQueue, newJob)
 		dsm.clusterManager.systemDb.Set(JOBS_KEY_NAME, dsm.jobsQueue)
 		dsm.syncMutex.Unlock()
+
+		if !hasFetchDataTasks {
+			dsm.clusterManager.currentNode.UpdateHeartbitPartitionTable(pt.Timestamp) //verify anyway, this node could be the last one to update its PT
+			dsm.VerifyClusterSyncWihtPartionTable()
+		}
 	}
 
 	return nil
@@ -152,9 +193,7 @@ func (dsm *DataSyncManager) SaveNewDataChunk(taskId string, collectionName strin
 	dsm.syncMutex.Unlock()
 
 	//save to db:
-	go func() {
-		dsm.clusterManager.currentNode.upsertFromClusterStream(collectionName, data)
-	}()
+	dsm.clusterManager.currentNode.upsertFromClusterStream(collectionName, data)
 }
 
 func (dsm *DataSyncManager) changeTaskStatus(taskId string, status partitioner.DataSyncTaskStatus) {
@@ -231,11 +270,13 @@ func (dsm *DataSyncManager) VerifyClusterSyncWihtPartionTable() {
 			goDelete := true
 			for _, s := range servers {
 				if s.NodeId != dsm.clusterManager.currentNode.GetId() {
+					//fmt.Println(s.NodeId, s.PartitionTableTimestamp, job.PartitionTable.Timestamp)
 					if s.PartitionTableTimestamp < job.PartitionTable.Timestamp {
 						goDelete = false
 					}
 				}
 			}
+
 			if goDelete {
 				launchDeleteProcess = true
 			}
@@ -276,7 +317,7 @@ func (dsm *DataSyncManager) ProcessDataDeleteTasks() {
 }
 
 func (dsm *DataSyncManager) deleteData(t partitioner.DataSyncTask) {
-	dsm.clusterManager.logger.Info("Start deleting data from " + strconv.FormatInt(int64(t.StartToken), 10) + " to " + strconv.FormatInt(int64(t.EndToken), 10))
+	dsm.clusterManager.logger.Info("Start deleting data from " + strconv.FormatUint(t.StartToken, 10) + " to " + strconv.FormatUint(t.EndToken, 10))
 
 	node := dsm.clusterManager.currentNode
 
@@ -321,11 +362,18 @@ func (dsm *DataSyncManager) deleteData(t partitioner.DataSyncTask) {
 func (dsm *DataSyncManager) updateStreamingTask(t partitioner.DataSyncTask) {
 
 	dsm.syncMutex.Lock()
+	tmp := []partitioner.DataSyncTask{}
 	for i, task := range dsm.streamingQueue {
 		if task.ID == t.ID {
-			dsm.streamingQueue[i] = t
+			if t.Status != partitioner.Completed {
+				dsm.streamingQueue[i] = t
+				tmp = append(tmp, task)
+			}
+		} else {
+			tmp = append(tmp, task)
 		}
 	}
+	dsm.streamingQueue = tmp
 	dsm.clusterManager.systemDb.Set(STREAMING_KEY_NAME, dsm.streamingQueue)
 	dsm.syncMutex.Unlock()
 }
@@ -401,19 +449,19 @@ func (dsm *DataSyncManager) processStreamingTask(t partitioner.DataSyncTask) {
 		startFromCollection := t.ProgressCollection
 		start := false
 
-		for _, c := range node.GetStats().Collections {
+		for _, cn := range node.GetStats().Collections {
 
 			if startFromCollection == "" {
 				start = true
-			} else if c == startFromCollection {
+			} else if cn == startFromCollection {
 				start = true
 			}
 
 			if start {
-				it, e = node.GetIterator(c)
+				it, e = node.GetIterator(cn)
 
 				if e != nil {
-					dsm.clusterManager.logger.Error(e, "Could not get iterator for collection: "+c)
+					dsm.clusterManager.logger.Error(e, "Could not get iterator for collection: "+cn)
 					t.Status = partitioner.SuspendedForError
 					t.Error = e
 					dsm.updateStreamingTask(t)
@@ -428,18 +476,24 @@ func (dsm *DataSyncManager) processStreamingTask(t partitioner.DataSyncTask) {
 
 						if hash >= t.StartToken && hash <= t.EndToken {
 							if e != nil {
-								dsm.clusterManager.logger.Error(e, "Could not get value for collection: "+c)
+								dsm.clusterManager.logger.Error(e, "Could not get value for collection: "+cn)
 								t.Status = partitioner.SuspendedForError
 								t.Error = e
 								dsm.updateStreamingTask(t)
 								return
 							} else {
-								data = append(data, stream.StreamEntry{Key: k, Value: v})
+								//need to make a copy of key because key is reused and slices are inherently reference-y things
+								a := make([]byte, len(k))
+								copy(a, k)
+								b := make([]byte, len(v))
+								copy(b, v)
+								data = append(data, stream.StreamEntry{Key: a, Value: b})
+
 								if len(data) >= DATA_SIZE_PER_FRAME {
 									if counter >= t.Progress {
 										//send to node
 										t.Progress++
-										t.ProgressCollection = c
+										t.ProgressCollection = cn
 										t.Status = partitioner.Streaming
 
 										msg := stream.StreamMessage{
@@ -476,6 +530,10 @@ func (dsm *DataSyncManager) processStreamingTask(t partitioner.DataSyncTask) {
 
 					if len(data) > 0 {
 						//send remaining data to node
+						t.Progress++
+						t.ProgressCollection = cn
+						t.Status = partitioner.Streaming
+
 						msg := stream.StreamMessage{
 							TaskId:         t.ID,
 							CollectionName: t.ProgressCollection,

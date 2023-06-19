@@ -11,7 +11,7 @@ nodeHeartbitPort: 4445
 numberOfVNodes: 8
 
 #where to store noed's data
-dataFolder: ./data/node3
+dataFolder: ./data/node4
 
 #***************************************
 #   IP and PORT of any other node in the cluster
