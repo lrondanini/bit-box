@@ -133,16 +133,12 @@ func (cm *ClusterManager) initServerList() {
 func (cm *ClusterManager) UpdateServersHeartbitStatus() {
 	servers := cm.currentNode.GetHeartbitStatus()
 	cm.initServerList()
-	notifySyncManager := false
 	clusterServers := cm.GetServers()
 	for sid, s := range clusterServers {
 		found := false
 		for _, hbs := range servers {
 			if hbs.NodeId == sid {
 				s.HeartbitStatus = hbs.HeartbitStatus
-				if s.PartitionTableTimestamp != hbs.PartitionTableTimestamp {
-					notifySyncManager = true
-				}
 				s.PartitionTableTimestamp = hbs.PartitionTableTimestamp
 				s.Memory = hbs.Memory
 				s.CPU = hbs.CPU
@@ -160,9 +156,7 @@ func (cm *ClusterManager) UpdateServersHeartbitStatus() {
 	}
 	cm.UpdateServers(clusterServers)
 
-	if notifySyncManager {
-		cm.dataSyncManager.VerifyClusterSyncWihtPartionTable()
-	}
+	cm.dataSyncManager.VerifyClusterSyncWihtPartionTable()
 
 }
 
@@ -449,8 +443,8 @@ func (cm *ClusterManager) manageSet(fromNodeId string, collectionname string, ke
 	return cm.currentNode.UpsertRaw(fromNodeId, collectionname, key, value)
 }
 
-func (cm *ClusterManager) manageGet(collectionname string, key []byte) ([]byte, error) {
-	return cm.currentNode.GetRaw(collectionname, key)
+func (cm *ClusterManager) manageGet(fromNodeId string, collectionname string, key []byte) ([]byte, error) {
+	return cm.currentNode.GetRaw(fromNodeId, collectionname, key)
 }
 
 func (cm *ClusterManager) manageDel(fromNodeId string, collectionname string, key []byte) error {

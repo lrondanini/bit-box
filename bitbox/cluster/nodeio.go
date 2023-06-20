@@ -2,7 +2,6 @@ package cluster
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 	"time"
 
@@ -54,7 +53,7 @@ func (n *Node) UpsertRaw(fromNodeId string, collectionName string, key []byte, v
 	skipReplicas := false
 
 	loc := n.clusterManager.partitionTable.GetLocation(hash)
-	fmt.Println(string(key), loc)
+
 	if loc.Master != n.GetId() {
 		isLocal = false
 		if fromNodeId == loc.Master || slices.Contains(loc.Replicas, fromNodeId) {
@@ -70,7 +69,7 @@ func (n *Node) UpsertRaw(fromNodeId string, collectionName string, key []byte, v
 		//upsert replicas
 		if !skipReplicas && err == nil {
 			for _, r := range loc.Replicas {
-				if r != "" && r != n.GetId() && r != fromNodeId {
+				if r != "" && r != n.GetId() {
 					err = n.clusterManager.commManager.SendSet(r, collectionName, key, value)
 					if err != nil {
 						//write to log for r recovery
@@ -78,7 +77,6 @@ func (n *Node) UpsertRaw(fromNodeId string, collectionName string, key []byte, v
 					}
 				}
 			}
-
 		}
 	} else {
 		err = n.clusterManager.commManager.SendSet(loc.Master, collectionName, key, value)
@@ -96,7 +94,7 @@ func (n *Node) UpsertRaw(fromNodeId string, collectionName string, key []byte, v
 				if err == nil {
 					//SEND TO OTHER REPLICA
 					for _, r := range loc.Replicas {
-						if r != "" && r != n.GetId() && r != fromNodeId {
+						if r != "" && r != n.GetId() {
 							err = n.clusterManager.commManager.SendSet(r, collectionName, key, value)
 							if err != nil {
 								//write to log for r recovery
@@ -109,7 +107,7 @@ func (n *Node) UpsertRaw(fromNodeId string, collectionName string, key []byte, v
 				//contact the replicas
 			SEND_TO_FIRST_REPLICA:
 				for _, r := range loc.Replicas {
-					if r != "" && r != n.GetId() && r != fromNodeId {
+					if r != "" && r != n.GetId() {
 						err = n.clusterManager.commManager.SendSet(r, collectionName, key, value)
 						if err == nil {
 							break SEND_TO_FIRST_REPLICA
@@ -158,7 +156,20 @@ func (n *Node) upsertFromClusterStream(collectionName string, data []stream.Stre
 		return e
 	}
 
-	c.UpsertFromStreaming(data, func() {
+	c.UpsertFromStreaming(data, func(collection string, key []byte) bool {
+		//find out if this key was already marked to be deleted
+		sKey, _ := storage.ToString(key)
+		sBytes, _ := storage.ToBytes(collectionName + sKey)
+
+		n.streamSync.Lock()
+		res, _ := n.streamSyncDeletesCollections.Exists(sBytes)
+		if res {
+			n.streamSyncDeletesCollections.Delete(sBytes)
+		}
+		n.streamSync.Unlock()
+		return res
+	}, func() {
+		//update stats
 		ev := Event{
 			EventType:      UpsertEvent,
 			CollectionName: collectionName,
@@ -167,7 +178,27 @@ func (n *Node) upsertFromClusterStream(collectionName string, data []stream.Stre
 		n.nodeStats.Log(ev)
 	})
 
+	//verify that no new entry was added to streamSyncDeletesCollections
+	it, err := n.streamSyncDeletesCollections.GetIteratorFrom(collectionName)
+
+	if err == nil {
+		for it.HasMoreWithPrefix(collectionName) {
+			key := []byte{}
+			keyToDelete := []byte{}
+
+			it.Next(&key, &keyToDelete)
+			n.streamSyncDeletesCollections.Delete(key)
+			c.Delete(keyToDelete)
+		}
+	}
 	return nil
+}
+
+func (n *Node) skipInsertFromStreamForEntry(collectionName string, key []byte) {
+	n.streamSync.Lock()
+	sKey, _ := storage.ToString(key)
+	n.streamSyncDeletesCollections.Set(collectionName+sKey, key)
+	n.streamSync.Unlock()
 }
 
 func (n *Node) deleteForClusterSync(collectionName string, keys [][]byte) error {
@@ -196,7 +227,7 @@ func (n *Node) Get(collectionName string, key interface{}, value interface{}) er
 	if err != nil {
 		return err
 	}
-	res, err := n.GetRaw(collectionName, bKey)
+	res, err := n.GetRaw(n.GetId(), collectionName, bKey)
 	if err != nil {
 		return err
 	}
@@ -206,7 +237,7 @@ func (n *Node) Get(collectionName string, key interface{}, value interface{}) er
 	return nil
 }
 
-func (n *Node) GetRaw(collectionName string, key []byte) ([]byte, error) {
+func (n *Node) GetRaw(fromNodeId string, collectionName string, key []byte) ([]byte, error) {
 
 	hash := partitioner.GetHash(key)
 
@@ -216,6 +247,9 @@ func (n *Node) GetRaw(collectionName string, key []byte) ([]byte, error) {
 	loc := n.clusterManager.partitionTable.GetLocation(hash)
 	if loc.Master != n.GetId() && !slices.Contains(loc.Replicas, n.GetId()) {
 		isLocal = false
+	} else if loc.Master == fromNodeId {
+		//fromNodeId can ask this node to get a key if fromNodeId knows that there is streaming/synching going on
+		isLocal = true
 	}
 
 	if isLocal {
@@ -231,7 +265,7 @@ func (n *Node) GetRaw(collectionName string, key []byte) ([]byte, error) {
 		if e != nil {
 			if e == storage.ErrKeyNotFound {
 				//verify that vnode associated with this key is not synching, if it is, we need to ask the remote node to send us the data
-				waiting, askToNodeId := n.clusterManager.dataSyncManager.WaitingForData(hash)
+				waiting, askToNodeId := n.clusterManager.dataSyncManager.IsWaitingForData(hash)
 
 				if waiting && askToNodeId != "" {
 					v, e := n.clusterManager.commManager.SendGet(askToNodeId, collectionName, key)
@@ -298,10 +332,10 @@ func (n *Node) performDelete(fromNodeId string, hash uint64, collectionName stri
 
 		if !exists {
 			// verify that vnode associated with this key is not synching
-			waiting, askToNodeId := n.clusterManager.dataSyncManager.WaitingForData(hash)
+			waiting, askToNodeId := n.clusterManager.dataSyncManager.IsWaitingForData(hash)
 
 			if waiting && askToNodeId != "" && askToNodeId != fromNodeId {
-				err = n.clusterManager.commManager.SendDel(askToNodeId, collectionName, key)
+				n.skipInsertFromStreamForEntry(collectionName, key)
 			}
 		} else {
 			ev := Event{
@@ -328,12 +362,7 @@ func (n *Node) DeleteRaw(fromNodeId string, collectionName string, key []byte) (
 	loc := n.clusterManager.partitionTable.GetLocation(hash)
 
 	if loc.Master != n.GetId() || loc.Master == fromNodeId {
-		if loc.Master == fromNodeId {
-			//fromNodeId can ask this node to delete a key if still streaming/synching
-			isLocal = true
-		} else {
-			isLocal = false
-		}
+		isLocal = false
 
 		if fromNodeId == loc.Master || slices.Contains(loc.Replicas, fromNodeId) {
 			//sender knows that this node is a replica, we can write but we cannot replicate (to avoid an infine loop)
@@ -349,7 +378,7 @@ func (n *Node) DeleteRaw(fromNodeId string, collectionName string, key []byte) (
 		//upsert replicas
 		if !skipReplicas && err == nil {
 			for _, r := range loc.Replicas {
-				if r != "" && r != n.GetId() && r != fromNodeId {
+				if r != "" && r != n.GetId() {
 					err = n.clusterManager.commManager.SendDel(r, collectionName, key)
 					if err != nil {
 						//write to log for r recovery
@@ -372,9 +401,9 @@ func (n *Node) DeleteRaw(fromNodeId string, collectionName string, key []byte) (
 				storage.AppendToWal(loc.Master, storage.DEL, collectionName, key, []byte{}, time.Now().UTC().UnixMicro())
 
 				if err == nil {
-					//SEND TO OTHER REPLICA
+					//SEND TO OTHER REPLICAS
 					for _, r := range loc.Replicas {
-						if r != "" && r != n.GetId() && r != fromNodeId {
+						if r != "" && r != n.GetId() {
 							err = n.clusterManager.commManager.SendDel(r, collectionName, key)
 							if err != nil {
 								//write to log for r recovery
@@ -387,7 +416,7 @@ func (n *Node) DeleteRaw(fromNodeId string, collectionName string, key []byte) (
 				//contact the replicas
 			SEND_TO_FIRST_REPLICA:
 				for _, r := range loc.Replicas {
-					if r != "" && r != n.GetId() && r != fromNodeId {
+					if r != "" && r != n.GetId() {
 						err = n.clusterManager.commManager.SendDel(r, collectionName, key)
 						if err == nil {
 							break SEND_TO_FIRST_REPLICA

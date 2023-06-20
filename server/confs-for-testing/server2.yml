@@ -27,11 +27,11 @@ clusterNodeHeartbitPort: 1112
 logTo: console
 # LOG_LEVEL = trace | debug | info | warn | error | fatal | panic 
 # in order of verbosity from trace (max) to panic (min)
-logLevel: debug
+logLevel: error
 # LOG_GOSSIP_PROTOCOL: true | false 
 logGossipProtocol: false
 # LOG_STORAGE: true | false - to log messages from the stroage layer
-logStorage: true
+logStorage: false
 
 # if logTo is file or both:
 logDir: ./logs/node2

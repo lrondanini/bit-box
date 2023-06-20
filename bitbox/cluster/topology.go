@@ -275,7 +275,7 @@ func (tm *TopologyManager) SetNewClusterMaster(fromNodeId string) (bool, int64) 
 		tm.logger.Info("DECLINED MASTER REQUEST - from " + fromNodeId + " - waiting for commit: " + strconv.FormatBool(tm.waitingForCommit) + " - current master: " + tm.currentMasterNodeId)
 		accepted = false
 	} else {
-		tm.logger.Info("ACCEPTED MASTER REQUEST - from " + fromNodeId + " - waiting for commit: " + strconv.FormatBool(tm.waitingForCommit) + " - current master: " + tm.currentMasterNodeId)
+		tm.logger.Info("ACCEPTED MASTER REQUEST - from " + fromNodeId)
 		tm.waitingForCommit = true
 		tm.currentMasterNodeId = fromNodeId
 	}

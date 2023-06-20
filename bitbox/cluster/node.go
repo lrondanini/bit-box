@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/lrondanini/bit-box/bitbox/cluster/actions"
 	"github.com/lrondanini/bit-box/bitbox/cluster/server"
@@ -14,14 +15,18 @@ import (
 )
 
 type Node struct {
-	id              string
-	NodeIp          string
-	NodePort        string
-	clusterManager  *ClusterManager
-	heartbitManager *HeartbitManager
-	logger          *utils.InternalLogger
-	storageManager  *storage.StorageManager
-	nodeStats       *NodeStats
+	id                           string
+	NodeIp                       string
+	NodePort                     string
+	clusterManager               *ClusterManager
+	heartbitManager              *HeartbitManager
+	logger                       *utils.InternalLogger
+	storageManager               *storage.StorageManager
+	nodeStats                    *NodeStats
+	streamSync                   sync.Mutex
+	streamingData                int
+	streamingDeleteAdded         bool
+	streamSyncDeletesCollections *storage.Collection
 }
 
 func GenerateNodeId(nodeIp string, nodePort string) string {
@@ -55,6 +60,11 @@ func InitNode(conf utils.Configuration) (*Node, error) {
 	}
 
 	node.nodeStats = ns
+
+	node.streamSyncDeletesCollections, err = storage.OpenCollection(storage.SYNC_DELETES_COLLECTION_NAME)
+	if err != nil {
+		return nil, err
+	}
 
 	return &node, nil
 }
@@ -110,6 +120,7 @@ func (n *Node) Shutdown() {
 	n.clusterManager.Shutdown()
 	n.storageManager.Shutdown()
 	n.nodeStats.Shutdown()
+	n.streamSyncDeletesCollections.Close()
 	fmt.Println("...cya!")
 }
 

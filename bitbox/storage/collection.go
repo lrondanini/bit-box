@@ -118,21 +118,23 @@ func (c *Collection) LoadBackUp() {
 	// db.Load(fi, 16)
 }
 
-func (c *Collection) UpsertFromStreaming(data []stream.StreamEntry, updateStats func()) {
+func (c *Collection) UpsertFromStreaming(data []stream.StreamEntry, skip func(string, []byte) bool, updateStats func()) {
 	txn := c.db.NewTransaction(true)
 
 	for _, entry := range data {
 		// node can accept writes while streaming/synching with the cluster,
 		// this means that if there is a value its newer than the one coming from the cluster
-		isNew := true
+		isNew := false
 		_, err := txn.Get(entry.Key)
 		if err != nil {
 			if err == ErrKeyNotFound {
-				isNew = false
+				isNew = true
 			}
 		}
 
-		if !isNew {
+		toDelete := skip(c.name, entry.Key)
+
+		if isNew && !toDelete {
 			err := txn.Set(entry.Key, entry.Value)
 			if err == badger.ErrTxnTooBig {
 				_ = txn.Commit()
@@ -140,6 +142,9 @@ func (c *Collection) UpsertFromStreaming(data []stream.StreamEntry, updateStats 
 				_ = txn.Set(entry.Key, entry.Value)
 			}
 			updateStats()
+		} else if toDelete {
+			//present but not deleted
+			txn.Delete(entry.Key)
 		}
 
 	}

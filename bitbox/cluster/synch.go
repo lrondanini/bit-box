@@ -78,7 +78,7 @@ func (dsm *DataSyncManager) CanSetPartitionTable() bool {
 	return canSet
 }
 
-func (dsm *DataSyncManager) WaitingForData(hash uint64) (bool, string) {
+func (dsm *DataSyncManager) IsWaitingForData(hash uint64) (bool, string) {
 	dsm.syncMutex.Lock()
 	defer dsm.syncMutex.Unlock()
 	for _, job := range dsm.jobsQueue {

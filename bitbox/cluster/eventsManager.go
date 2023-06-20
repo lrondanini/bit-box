@@ -343,7 +343,7 @@ func (em *EventsManager) onGet(f *tcp.Frame, replyToChannel chan tcp.Frame) {
 	if err != nil {
 		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
 	} else {
-		vBytes, err := em.clusterManager.manageGet(req.Collection, req.Key)
+		vBytes, err := em.clusterManager.manageGet(f.FromNodeId, req.Collection, req.Key)
 		if err != nil {
 			if err == badger.ErrKeyNotFound {
 				replyToChannel <- *em.newErrorFrame(actions.NoAction, "Not found")

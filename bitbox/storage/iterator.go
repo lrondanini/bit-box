@@ -178,6 +178,22 @@ func (i *Iterator) HasMore() bool {
 	return i.hasMore
 }
 
+func (i *Iterator) HasMoreWithPrefix(prefix interface{}) bool {
+	pBytes, _ := ToBytes(prefix)
+	it := i.it
+	if !i.started {
+		i.started = true
+		i.hasMore = it.ValidForPrefix(pBytes)
+	} else {
+		if i.hasMore {
+			it.Next()
+			i.hasMore = it.ValidForPrefix(pBytes)
+		}
+	}
+
+	return i.hasMore
+}
+
 func (i *Iterator) Next(key interface{}, value interface{}) error {
 	vv := reflect.ValueOf(value)
 	kk := reflect.ValueOf(key)

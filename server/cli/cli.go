@@ -144,7 +144,7 @@ func (cli *CLI) Run() {
 	}
 
 	fmt.Println()
-	fmt.Println("Welcome to bit-box cli, press Enter for a list of commands")
+	fmt.Println("Welcome to bit-box cli, type h for a list of commands")
 
 	exiting := false
 	for {
@@ -245,8 +245,6 @@ func (cli *CLI) Run() {
 			default:
 				if uInput.cmd != "" {
 					fmt.Println("Unknown command: " + uInput.cmd)
-				} else {
-					cli.PrintHelp()
 				}
 			}
 		}
@@ -264,7 +262,6 @@ func (cli *CLI) PrintHelp() {
 	fmt.Fprintln(writer, "(c)\tconf-cli\t\tView and/or configure the cli connection to the cluster")
 	fmt.Fprintln(writer, "\t\t\t")
 	fmt.Fprintln(writer, "(s)\tstatus\t\tShow clusters status")
-	fmt.Fprintln(writer, "(nl)\tnodes-list\t\tLists all the nodes in the cluster")
 	fmt.Fprintln(writer, "(ns)\tnode-stats\t[node-id]\tReturns stats for a specific node, if node-id is empty will prompt a list of nodes to choose from")
 	fmt.Fprintln(writer, "(rn)\tremove-node\t[node-id]\tDecommissions a node from the cluster, if node-id is empty will prompt a list of nodes to choose from")
 	fmt.Fprintln(writer, "(pt)\tpartition-table\t\tShow tokens distribution among nodes")
@@ -323,6 +320,8 @@ func (cli *CLI) waitForUserInputInput() userInput {
 	historyPointer := len(cli.cmdHistory)
 
 	fmt.Print(head)
+
+	cursorPosition := 0
 LOOP:
 	for {
 		char, key, err := keyboard.GetKey()
@@ -331,13 +330,29 @@ LOOP:
 		}
 
 		switch key {
+		case keyboard.KeyArrowLeft:
+			cursorPosition--
+			if cursorPosition < 0 {
+				cursorPosition = 0
+			} else {
+				fmt.Fprintf(os.Stdout, "\x1b[%dD", 1)
+			}
+
+		case keyboard.KeyArrowRight:
+			cursorPosition++
+			if cursorPosition > len(input) {
+				cursorPosition = len(input)
+			} else {
+				fmt.Fprintf(os.Stdout, "\x1b[%dC", 1)
+			}
 		case keyboard.KeyArrowDown:
 			historyPointer++
 			if historyPointer >= len(cli.cmdHistory) {
 				historyPointer = len(cli.cmdHistory) - 1
 			}
 			input = cli.cmdHistory[historyPointer]
-			fmt.Printf("\033[2K\r")
+			fmt.Printf("\033[2K\r") //erase current line
+			cursorPosition = len(input)
 			fmt.Print(head + input)
 		case keyboard.KeyArrowUp:
 			historyPointer--
@@ -346,28 +361,70 @@ LOOP:
 			}
 			input = cli.cmdHistory[historyPointer]
 			fmt.Printf("\033[2K\r")
+			cursorPosition = len(input)
 			fmt.Print(head + input)
 		case keyboard.KeyEsc:
 			break LOOP
 		case keyboard.KeyEnter:
 			break LOOP
 		case keyboard.KeySpace:
-			input += " "
-			fmt.Printf("\033[2K\r")
-			fmt.Print(head + input)
+			if cursorPosition < len(input) {
+				s := input[0:cursorPosition]
+				e := input[cursorPosition:]
+				input = s + " " + e
+				cursorPosition++
+				fmt.Printf("\033[2K\r")
+				fmt.Print(head + input)
+				fmt.Fprintf(os.Stdout, "\x1b[%dD", len(input)-cursorPosition)
+			} else {
+				input += " "
+				cursorPosition++
+				fmt.Printf("\033[2K\r")
+				fmt.Print(head + input)
+			}
 		case keyboard.KeyBackspace, keyboard.KeyBackspace2:
 			if len(input) > 0 {
+				cursorPosition--
+				if cursorPosition < 0 {
+					cursorPosition = 0
+				}
 				input = input[:len(input)-1]
 				fmt.Printf("\033[2K\r")
 				fmt.Print(head + input)
 			}
 		case keyboard.KeyCtrlC:
-			input = "quit"
+			input = "quit" //sends quit cmd
 			break LOOP
-		default:
-			input += string(char)
+		case keyboard.KeyCtrlE:
+			//go to end of the line
+			cursorPosition = len(input)
 			fmt.Printf("\033[2K\r")
 			fmt.Print(head + input)
+		case keyboard.KeyCtrlA:
+			//go to start of the line
+			fmt.Fprintf(os.Stdout, "\x1b[%dD", cursorPosition)
+			cursorPosition = 0
+		case keyboard.KeyCtrlK:
+			//delete line
+			cursorPosition = 0
+			input = ""
+			fmt.Printf("\033[2K\r")
+			fmt.Print(head + input)
+		default:
+			if cursorPosition < len(input) {
+				s := input[0:cursorPosition]
+				e := input[cursorPosition:]
+				input = s + string(char) + e
+				cursorPosition++
+				fmt.Printf("\033[2K\r")
+				fmt.Print(head + input)
+				fmt.Fprintf(os.Stdout, "\x1b[%dD", len(input)-cursorPosition)
+			} else {
+				input += string(char)
+				cursorPosition++
+				fmt.Printf("\033[2K\r")
+				fmt.Print(head + input)
+			}
 		}
 	}
 

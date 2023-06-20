@@ -8,6 +8,7 @@ import (
 
 const SYSTEM_DB_NAME = "_system"
 const NODE_STATS_DB_NAME = "_node"
+const SYNC_DELETES_COLLECTION_NAME = "_sync_deletes"
 
 type StorageManager struct {
 	collections map[string]*Collection
@@ -30,7 +31,7 @@ func InitStorageManager() *StorageManager {
 }
 
 func (db *StorageManager) GetCollection(collectionName string) (*Collection, error) {
-	if collectionName == SYSTEM_DB_NAME {
+	if collectionName == SYSTEM_DB_NAME || collectionName == NODE_STATS_DB_NAME || collectionName == SYNC_DELETES_COLLECTION_NAME {
 		return nil, ErrCollectionNameReserved
 	}
 
@@ -56,7 +57,7 @@ func (db *StorageManager) GetCollection(collectionName string) (*Collection, err
 }
 
 func (db *StorageManager) DeleteCollection(collectionName string) (err error) {
-	if collectionName == SYSTEM_DB_NAME {
+	if collectionName == SYSTEM_DB_NAME || collectionName == NODE_STATS_DB_NAME || collectionName == SYNC_DELETES_COLLECTION_NAME {
 		return ErrCollectionNameReserved
 	}
 
