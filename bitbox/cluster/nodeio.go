@@ -519,6 +519,7 @@ LOOP:
 
 }
 
+// this will delete the collection locally, it wont delete it from the other nodes in the cluster
 func (n *Node) DeleteCollection(collectionName string) error {
 	c, e := n.storageManager.GetCollection(collectionName)
 

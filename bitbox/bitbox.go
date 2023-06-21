@@ -61,6 +61,10 @@ func (bb *BitBox) Upsert(collectionName string, key interface{}, value interface
 	return bb.node.Upsert(collectionName, key, value)
 }
 
+func (bb *BitBox) Set(collectionName string, key interface{}, value interface{}) error {
+	return bb.node.Upsert(collectionName, key, value)
+}
+
 func (bb *BitBox) Get(collectionName string, key interface{}, value interface{}) error {
 	return bb.node.Get(collectionName, key, value)
 }
@@ -69,18 +73,19 @@ func (bb *BitBox) Delete(collectionName string, key interface{}) error {
 	return bb.node.Delete(collectionName, key)
 }
 
-func (bb *BitBox) GetIterator(collectionName string) (*storage.Iterator, error) {
+func (bb *BitBox) GetLocalIterator(collectionName string) (*storage.Iterator, error) {
 	return bb.node.GetIterator(collectionName)
 }
 
-func (bb *BitBox) GetIteratorFrom(collectionName string, from interface{}) (*storage.Iterator, error) {
+func (bb *BitBox) GetLocalIteratorFrom(collectionName string, from interface{}) (*storage.Iterator, error) {
 	return bb.node.GetIteratorFrom(collectionName, from)
 }
 
-func (bb *BitBox) GetFilteredIterator(collectionName string, from interface{}, to interface{}) (*storage.Iterator, error) {
+func (bb *BitBox) GetLocalFilteredIterator(collectionName string, from interface{}, to interface{}) (*storage.Iterator, error) {
 	return bb.node.GetFilteredIterator(collectionName, from, to)
 }
 
-func (bb *BitBox) DeleteCollection(collectionName string) error {
-	return bb.node.DeleteCollection(collectionName)
-}
+//this will work only locally, it wont delete collection from other nodes
+// func (bb *BitBox) DeleteCollection(collectionName string) error {
+// 	return bb.node.DeleteCollection(collectionName)
+// }

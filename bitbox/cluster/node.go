@@ -24,8 +24,6 @@ type Node struct {
 	storageManager               *storage.StorageManager
 	nodeStats                    *NodeStats
 	streamSync                   sync.Mutex
-	streamingData                int
-	streamingDeleteAdded         bool
 	streamSyncDeletesCollections *storage.Collection //temp storage to avoid to insert from stream an entry taht as deleted (while waiting for sync)
 }
 
@@ -105,11 +103,6 @@ func (n *Node) Start(ctx context.Context, signalChan chan os.Signal, forceRejoin
 					//n.startSyncNewPartitionTableProcess()
 				}
 			}
-		default:
-			//do your work
-			//fmt.Println("Doing work")
-			//time.Sleep(2 * time.Second)
-			//work() //on defer call shutdown node
 		}
 	}
 }
