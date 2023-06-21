@@ -17,3 +17,4 @@ logs
 .bit-box-cli-history
 bit-box-cli.yml
 confs-for-testing
+build

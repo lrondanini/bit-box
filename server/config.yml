@@ -14,7 +14,10 @@ numberOfVNodes: 8
 dataFolder: ./data
 
 #*********************************************************
-#   Used to join a cluster
+#   TO JOIN A CLUSTER
+#
+#   - If this is the first node in the cluster, leave empty
+#   - You can reference any node in the cluster
 #*********************************************************
 clusterNodeIp: 
 clusterNodePort: 
