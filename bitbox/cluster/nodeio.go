@@ -434,7 +434,7 @@ func (n *Node) DeleteRaw(fromNodeId string, collectionName string, key []byte) (
 					}
 				}
 			} else {
-				//contact the replicas
+				//contact the first available replica
 			SEND_TO_FIRST_REPLICA:
 				for _, r := range loc.Replicas {
 					if r != "" && r != n.GetId() {
