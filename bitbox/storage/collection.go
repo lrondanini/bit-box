@@ -159,6 +159,7 @@ func (c *Collection) DeleteKeys(keys [][]byte, updateStats func()) error {
 	for _, k := range keys {
 		txn.Delete(k)
 		updateStats()
+
 	}
 	_ = txn.Commit()
 

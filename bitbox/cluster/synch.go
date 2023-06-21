@@ -276,7 +276,6 @@ func (dsm *DataSyncManager) VerifyClusterSyncWihtPartionTable() {
 					}
 				}
 			}
-
 			if goDelete {
 				launchDeleteProcess = true
 			}
@@ -300,7 +299,7 @@ func (dsm *DataSyncManager) ProcessDataDeleteTasks() {
 	for _, job := range dsm.jobsQueue {
 		if job.GoDelete {
 			for _, task := range job.SynchTasks {
-				if task.Action == partitioner.DeleteData {
+				if task.Action == partitioner.DeleteData && task.Status == partitioner.NewTask {
 					deleteDataTasks = append(deleteDataTasks, task)
 				}
 			}
@@ -318,6 +317,8 @@ func (dsm *DataSyncManager) ProcessDataDeleteTasks() {
 
 func (dsm *DataSyncManager) deleteData(t partitioner.DataSyncTask) {
 	dsm.clusterManager.logger.Info("Start deleting data from " + strconv.FormatUint(t.StartToken, 10) + " to " + strconv.FormatUint(t.EndToken, 10))
+
+	dsm.changeTaskStatus(t.ID, partitioner.Streaming)
 
 	node := dsm.clusterManager.currentNode
 
@@ -338,7 +339,10 @@ func (dsm *DataSyncManager) deleteData(t partitioner.DataSyncTask) {
 			if e == nil {
 				if hash >= t.StartToken && hash <= t.EndToken {
 					//delete
-					batch = append(batch, k)
+					//need to make a copy of key because key is reused and slices are inherently reference-y things
+					a := make([]byte, len(k))
+					copy(a, k)
+					batch = append(batch, a)
 				}
 				if len(batch) >= 1000 {
 					node.deleteForClusterSync(c, batch)
@@ -432,7 +436,7 @@ func (dsm *DataSyncManager) processStreamingTask(t partitioner.DataSyncTask) {
 	var e error
 
 	if t.Status != partitioner.CompletedMessageNotSent {
-		const DATA_SIZE_PER_FRAME = 5000
+		const DATA_SIZE_PER_FRAME = 500
 
 		node := dsm.clusterManager.currentNode
 

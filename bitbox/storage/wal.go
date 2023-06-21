@@ -194,3 +194,8 @@ func (it *WalIterator) PullNext() (Entry, error) {
 	}
 	return entry, err
 }
+
+// WARNING, it will delete the wal for the node
+func (it *WalIterator) AllStreamed() {
+	it.wal.Destroy()
+}

@@ -46,6 +46,8 @@ func (n *Node) Upsert(collectionName string, key interface{}, value interface{})
 
 func (n *Node) UpsertRaw(fromNodeId string, collectionName string, key []byte, value []byte) (err error) {
 
+	timestamp := time.Now().UTC().UnixMicro()
+
 	hash := partitioner.GetHash(key)
 
 	//find WHERE to store this data
@@ -64,7 +66,7 @@ func (n *Node) UpsertRaw(fromNodeId string, collectionName string, key []byte, v
 	}
 
 	if isLocal {
-		err = n.performUpsert(collectionName, hash, key, value)
+		err = n.performUpsert(collectionName, hash, key, value, timestamp)
 
 		//upsert replicas
 		if !skipReplicas && err == nil {
@@ -86,7 +88,7 @@ func (n *Node) UpsertRaw(fromNodeId string, collectionName string, key []byte, v
 				//master is down, this node is temp master for this write
 
 				//WRITE LOCALLY
-				err = n.performUpsert(collectionName, hash, key, value)
+				err = n.performUpsert(collectionName, hash, key, value, timestamp)
 
 				//WRITE TO LOG FOR MASTER RECOVERY
 				storage.AppendToWal(loc.Master, storage.SET, collectionName, key, value, time.Now().UTC().UnixMicro())
@@ -121,30 +123,49 @@ func (n *Node) UpsertRaw(fromNodeId string, collectionName string, key []byte, v
 	return err
 }
 
-func (n *Node) performUpsert(collectionName string, hash uint64, key []byte, value []byte) error {
+func (n *Node) performUpsert(collectionName string, hash uint64, key []byte, value []byte, timestamp int64) error {
 	c, err := n.storageManager.GetCollection(collectionName)
 
 	if err == nil {
 		exists, _ := c.Exists(key)
 
-		v := storage.DbValue{
-			Hash:      hash,
-			Timestamp: time.Now().UTC().UnixMicro(),
-			Value:     value,
-		}
+		skipUpsert := false
+		if exists {
+			var vBytes []byte
 
-		vBytes, err := storage.EncodeValue(v)
-
-		if err == nil {
-			c.SetRaw(key, vBytes)
-
-			ev := Event{
-				EventType:      UpsertEvent,
-				CollectionName: collectionName,
-				IsNew:          !exists,
+			vBytes, err = c.GetRaw(key)
+			if err == nil {
+				tmpV := storage.DbValue{}
+				err = storage.DecodeValue(vBytes, &tmpV)
+				if err == nil {
+					if tmpV.Timestamp > timestamp {
+						skipUpsert = true
+					}
+				}
 			}
-			n.nodeStats.Log(ev)
 		}
+
+		if !skipUpsert {
+			v := storage.DbValue{
+				Hash:      hash,
+				Timestamp: timestamp,
+				Value:     value,
+			}
+
+			vBytes, err := storage.EncodeValue(v)
+
+			if err == nil {
+				c.SetRaw(key, vBytes)
+
+				ev := Event{
+					EventType:      UpsertEvent,
+					CollectionName: collectionName,
+					IsNew:          !exists,
+				}
+				n.nodeStats.Log(ev)
+			}
+		}
+
 	}
 
 	return err
@@ -510,4 +531,56 @@ func (n *Node) DeleteCollection(collectionName string) error {
 
 func (n *Node) GetStats() *NodeStats {
 	return n.nodeStats
+}
+
+// nodeId was down, see if we have data to send its way
+func (n *Node) bringNodeUpToDate(nodeId string) {
+	const DATA_SIZE_PER_FRAME = 500
+
+	it, err := storage.StartScan(nodeId)
+	if err != nil {
+		n.logger.Error(err, "Cannot bring "+nodeId+" up to date")
+		return
+	}
+
+	log := []storage.Entry{}
+	for it.HasMore() {
+		entry, _ := it.PullNext()
+
+		log = append(log, entry)
+		//fmt.Println(entry.LogPosition, entry.Action, entry.Collection, string(entry.Key), string(entry.Value), entry.Timestamp)
+		if len(log) >= DATA_SIZE_PER_FRAME {
+			n.clusterManager.commManager.SendActionsLog(nodeId, log)
+			log = []storage.Entry{}
+		}
+	}
+
+	if len(log) >= 0 {
+		n.clusterManager.commManager.SendActionsLog(nodeId, log)
+	}
+
+	it.AllStreamed()
+
+}
+
+func (n *Node) processActionsLog(log []storage.Entry) {
+	for _, entry := range log {
+		if entry.Action == storage.SET {
+			hash := partitioner.GetHash(entry.Key)
+			//collectionName string,  uint64, key []byte, value []byte
+			n.performUpsert(entry.Collection, hash, entry.Key, entry.Value, entry.Timestamp)
+		} else if entry.Action == storage.DEL {
+			c, err := n.storageManager.GetCollection(entry.Collection)
+
+			if err == nil {
+				ev := Event{
+					EventType:      DeleteEvent,
+					CollectionName: entry.Collection,
+				}
+				n.nodeStats.Log(ev)
+
+				c.DeleteRaw(entry.Key)
+			}
+		}
+	}
 }

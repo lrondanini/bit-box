@@ -29,6 +29,7 @@ const (
 	Del
 	Scan
 	GetKeyLocation
+	SendActionsLog //used to bring a resuscitated node up to date
 )
 
 // actions sent from the cluster to the current node

@@ -10,6 +10,7 @@ import (
 	"github.com/lrondanini/bit-box/bitbox/cluster/stream"
 	"github.com/lrondanini/bit-box/bitbox/communication/tcp"
 	"github.com/lrondanini/bit-box/bitbox/communication/types"
+	"github.com/lrondanini/bit-box/bitbox/storage"
 )
 
 func DeserializeBody(body string, toObject interface{}) error {
@@ -418,4 +419,15 @@ func (c *CommunicationManager) SendGetKeyLocation(toNodeId string, key []byte) (
 	}
 
 	return res, err
+}
+
+func (c *CommunicationManager) SendActionsLog(toNodeId string, data []storage.Entry) error {
+
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.SendActionsLog, data)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

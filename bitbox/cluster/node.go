@@ -26,7 +26,7 @@ type Node struct {
 	streamSync                   sync.Mutex
 	streamingData                int
 	streamingDeleteAdded         bool
-	streamSyncDeletesCollections *storage.Collection
+	streamSyncDeletesCollections *storage.Collection //temp storage to avoid to insert from stream an entry taht as deleted (while waiting for sync)
 }
 
 func GenerateNodeId(nodeIp string, nodePort string) string {
@@ -174,6 +174,15 @@ func (n *Node) manageHeartbitEvents() {
 			n.ManageNodesDown(nodesThatLeft)
 		case serf.EventMemberJoin:
 			n.clusterManager.UpdateServersHeartbitStatus()
+			e, ok := r.(serf.MemberEvent)
+			if !ok {
+				continue
+			}
+
+			for _, m := range e.Members {
+				//see if we have data to send to this node (inserts/deletes that happened while the node was down)
+				go n.bringNodeUpToDate(m.Name)
+			}
 		case serf.EventMemberUpdate:
 			_, ok := r.(serf.MemberEvent)
 			if !ok {

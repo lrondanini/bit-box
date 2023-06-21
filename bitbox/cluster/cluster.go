@@ -458,3 +458,7 @@ func (cm *ClusterManager) manageScan(collectionname string, startFromKey []byte,
 func (cm *ClusterManager) manageGetKeyLocation(key []byte) partitioner.HashLocation {
 	return cm.currentNode.GetKeyLocationInCluster(key)
 }
+
+func (cm *ClusterManager) manageActionsLogStreamChunk(log []storage.Entry) {
+	cm.currentNode.processActionsLog(log)
+}

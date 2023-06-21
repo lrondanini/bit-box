@@ -10,6 +10,7 @@ import (
 	"github.com/lrondanini/bit-box/bitbox/communication"
 	"github.com/lrondanini/bit-box/bitbox/communication/tcp"
 	"github.com/lrondanini/bit-box/bitbox/communication/types"
+	"github.com/lrondanini/bit-box/bitbox/storage"
 
 	"github.com/lrondanini/bit-box/bitbox/cluster/actions"
 )
@@ -92,6 +93,8 @@ func (em *EventsManager) HandleEvent(msg tcp.MessageFromCluster) error {
 		em.onScan(&f, msg.ReplyToChannel)
 	case actions.GetKeyLocation:
 		em.onGetKeyLocation(&f, msg.ReplyToChannel)
+	case actions.SendActionsLog:
+		em.onSendActionsLog(&f, msg.ReplyToChannel)
 	}
 
 	return nil
@@ -399,5 +402,18 @@ func (em *EventsManager) onGetKeyLocation(f *tcp.Frame, replyToChannel chan tcp.
 		loc := em.clusterManager.manageGetKeyLocation(req.Key)
 		resBody, _ := communication.SerialiazeBody(loc)
 		replyToChannel <- *em.newFrame(actions.NoAction, resBody)
+	}
+}
+
+func (em *EventsManager) onSendActionsLog(f *tcp.Frame, replyToChannel chan tcp.Frame) {
+	req := []storage.Entry{}
+	err := communication.DeserializeBody(f.Body, &req)
+
+	if err != nil {
+		replyToChannel <- *em.newErrorFrame(actions.NoAction, "Could not parse request: "+err.Error())
+	} else {
+
+		em.clusterManager.manageActionsLogStreamChunk(req)
+		replyToChannel <- *em.ackFrame
 	}
 }
