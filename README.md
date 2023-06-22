@@ -1,7 +1,4 @@
 
-
-# bit-box
-
 <img src="graffitiLogo.png" alt="bit-box" width="600"/>
 
 
@@ -80,7 +77,7 @@ func (c *Logger) Panic(err error, msg string) {...}
 
 Bit-box store data in collections. A collection is automatically created on the first insert. Data in a collection are sorted according to the type of the key. For example, a key of type string follows a lexicographic order while a
 key of type int follows ASC order. 
-### Setting and getting key/values
+### Setting, getting and deleting key/values
 
 To store a value:
 
@@ -101,9 +98,18 @@ bitbox.Set("tasks", "one", "first-task")
 
 value := ""
 _ := bitbox.Get("tasks", "one", &value)
-fmt.Println(value) //will print first-task
+fmt.Println(value) //will print "first-task"
 ```
 
+To delete:
+
+```
+bitbox.Delete(collectionName string, key interface{}) error
+```
+
+### Subscribe to events
+
+### Iteration
 
 # Architecture
 
