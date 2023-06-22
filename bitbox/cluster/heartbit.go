@@ -1,12 +1,27 @@
+// Copyright 2023 lucarondanini
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// 
+//     http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cluster
 
 import (
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/lrondanini/bit-box/bitbox/cluster/server"
+	"github.com/lrondanini/bit-box/bitbox/cluster/server/serverStatus/heartBitStatus"
 	"github.com/lrondanini/bit-box/bitbox/cluster/utils"
-	"github.com/lrondanini/bit-box/bitbox/serverStatus/heartBitStatus"
 
 	"github.com/hashicorp/serf/serf"
 )
@@ -17,6 +32,7 @@ type HeartbitManager struct {
 	eventChannel chan serf.Event
 	started      bool
 	tags         map[string]string
+	mu           sync.Mutex
 }
 
 func InitHeartbitManager(nodeId string, port string) *HeartbitManager {
@@ -31,11 +47,11 @@ func InitHeartbitManager(nodeId string, port string) *HeartbitManager {
 		panic(err)
 	}
 
-	// nullLogger := log.New(ioutil.Discard, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	// conf.Logger = nullLogger
-	// conf.MemberlistConfig.Logger = conf.Logger
+	var clusterConfig = utils.GetClusterConfiguration()
 
-	serfLogger := &utils.SerfLogWriter{}
+	serfLogger := &utils.SerfLogWriter{
+		Skip: !clusterConfig.LOG_GOSSIP_PROTOCOL,
+	}
 	conf.LogOutput = serfLogger
 	conf.MemberlistConfig.LogOutput = serfLogger
 
@@ -60,7 +76,7 @@ func (h *HeartbitManager) Shutdown() {
 	h.serf.Shutdown()
 }
 
-func (h *HeartbitManager) JoinCluster(partitionTableTimestamp int64) {
+func (h *HeartbitManager) JoinCluster() {
 
 	logger := utils.GetLogger()
 
@@ -69,7 +85,7 @@ func (h *HeartbitManager) JoinCluster(partitionTableTimestamp int64) {
 	var ok = true
 	if conf.CLUSTER_NODE_IP == "" || conf.CLUSTER_NODE_HEARTBIT_PORT == "" {
 		ok = false
-		logger.Error().Msg("Cannot start heartbit, please verify configuration for clusterNodeIp, clusterNodePort, clusterNodeHeartbitPort and restart this node")
+		logger.Error(nil, "Cannot start heartbit, please verify configuration for clusterNodeIp, clusterNodePort, clusterNodeHeartbitPort and restart this node")
 	}
 
 	if ok {
@@ -77,10 +93,9 @@ func (h *HeartbitManager) JoinCluster(partitionTableTimestamp int64) {
 		_, err := h.serf.Join([]string{conf.CLUSTER_NODE_IP + ":" + conf.CLUSTER_NODE_HEARTBIT_PORT}, false)
 
 		if err != nil {
-			logger.Error().Msg("Cannot start heartbit: " + err.Error())
+			logger.Error(err, "Cannot start heartbit")
 		}
 
-		h.SetPartitionTableTimestamp(partitionTableTimestamp)
 		h.UpdateHardwareStats()
 		h.started = true
 
@@ -90,11 +105,15 @@ func (h *HeartbitManager) JoinCluster(partitionTableTimestamp int64) {
 }
 
 func (h *HeartbitManager) SetPartitionTableTimestamp(partitionTableTimestamp int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.tags["ptTimestamp"] = strconv.FormatInt(partitionTableTimestamp, 10)
 	h.setTags()
 }
 
 func (h *HeartbitManager) UpdateHardwareStats() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	stats := utils.GetHardwareStats()
 	h.tags["memory"] = stats.Memory
 	h.tags["cpu"] = stats.CPU
@@ -105,21 +124,29 @@ func (h *HeartbitManager) setTags() {
 	logger := utils.GetLogger()
 	err := h.serf.SetTags(h.tags)
 	if err != nil {
-		logger.Error().Msg("Cannot set partition table timestamp for heartbit: " + err.Error())
+		logger.Error(err, "Cannot set partition table timestamp for heartbit")
 	}
 }
 
 func (h *HeartbitManager) GetServers() []server.Server {
 	var res []server.Server
 	for _, m := range h.serf.Members() {
+		ptTimestamp := int64(0)
+		if m.Tags["ptTimestamp"] != "" {
+			var err error
+			ptTimestamp, err = strconv.ParseInt(m.Tags["ptTimestamp"], 10, 64)
+			if err != nil {
+				ptTimestamp = int64(0)
+			}
+		}
 		res = append(res, server.Server{
-			NodeId:           m.Name,
-			NodeIp:           m.Addr.String(),
-			NodeHeartbitPort: strconv.FormatUint(uint64(m.Port), 10),
-			HeartbitStatus:   heartBitStatus.HeartBitStatus(m.Status),
-			PartitionTable:   m.Tags["ptTimestamp"],
-			Memory:           m.Tags["memory"],
-			CPU:              m.Tags["cpu"],
+			NodeId:                  m.Name,
+			NodeIp:                  m.Addr.String(),
+			NodeHeartbitPort:        strconv.FormatUint(uint64(m.Port), 10),
+			HeartbitStatus:          heartBitStatus.HeartBitStatus(m.Status),
+			PartitionTableTimestamp: ptTimestamp,
+			Memory:                  m.Tags["memory"],
+			CPU:                     m.Tags["cpu"],
 		})
 	}
 

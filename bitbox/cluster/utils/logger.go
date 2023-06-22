@@ -1,108 +1,108 @@
+// Copyright 2023 lucarondanini
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// 
+//     http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package utils
 
 import (
-	"io"
-	"os"
-	"path"
+	"log"
 	"strings"
-	"sync"
-
-	"github.com/rs/zerolog"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-var logInstance *Logger
-var loggerOnce sync.Once
-
-func GetLogger() *Logger {
-	loggerOnce.Do(func() {
-		logInstance = Configure(GetClusterConfiguration())
-	})
-	return logInstance
+type Logger interface {
+	Trace(string)
+	Debug(string)
+	Info(string)
+	Warn(string)
+	Error(error, string)
+	Fatal(error, string)
+	Panic(error, string)
 }
 
-type Logger struct {
-	*zerolog.Logger
+type InternalLogger struct {
+	logger Logger
 }
 
-func Configure(conf *Configuration) *Logger {
-	var writers []io.Writer
+var loggerInstance InternalLogger
 
-	if conf.LOG_TO == "console" {
-		writers = append(writers, zerolog.ConsoleWriter{Out: os.Stderr})
-	} else if conf.LOG_TO == "file" {
-		writers = append(writers, newRollingFile(conf))
-	} else if conf.LOG_TO == "both" {
-		writers = append(writers, zerolog.ConsoleWriter{Out: os.Stderr})
-		writers = append(writers, newRollingFile(conf))
-	}
-
-	mw := io.MultiWriter(writers...)
-
-	switch conf.LOG_LEVEL {
-	case "trace":
-		zerolog.SetGlobalLevel(zerolog.TraceLevel)
-	case "debug":
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	case "info":
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	case "warn":
-		zerolog.SetGlobalLevel(zerolog.WarnLevel)
-	case "error":
-		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
-	case "fatal":
-		zerolog.SetGlobalLevel(zerolog.FatalLevel)
-	case "panic":
-		zerolog.SetGlobalLevel(zerolog.PanicLevel)
-	}
-
-	logger := zerolog.New(mw).With().Timestamp().Caller().Logger()
-
-	return &Logger{
-		Logger: &logger,
-	}
+func InitLogger(l Logger) {
+	loggerInstance.logger = l
 }
 
-func newRollingFile(conf *Configuration) io.Writer {
-	if conf.LOG_DIR == "" {
-		conf.LOG_DIR = "./bit-box-logs"
-	}
-	if conf.LOG_FILE_NAME == "" {
-		conf.LOG_FILE_NAME = "log.txt"
-	}
+func GetLogger() *InternalLogger {
+	return &loggerInstance
+}
 
-	if conf.LOG_FILE_MAX_SIZE == 0 {
-		// MaxSize the max size in MB of the logfile before it's rolled
-		conf.LOG_FILE_MAX_SIZE = 20
+func (c *InternalLogger) Trace(msg string) {
+	if c.logger == nil {
+		return
 	}
-
-	if conf.LOG_FILE_MAX_NUM_BACKUPS == 0 {
-		// MaxBackups the max number of rolled files to keep
-		conf.LOG_FILE_MAX_SIZE = 10
+	c.logger.Trace(msg)
+}
+func (c *InternalLogger) Debug(msg string) {
+	if c.logger == nil {
+		return
 	}
-
-	if conf.LOG_FILE_MAX_AGE == 0 {
-		// MaxAge the max age in days to keep a logfile
-		conf.LOG_FILE_MAX_SIZE = 10
+	c.logger.Debug(msg)
+}
+func (c *InternalLogger) Info(msg string) {
+	log.Println(msg)
+	if c.logger == nil {
+		return
 	}
-
-	return &lumberjack.Logger{
-		Filename:   path.Join(conf.LOG_DIR, conf.LOG_FILE_NAME),
-		MaxBackups: conf.LOG_FILE_MAX_NUM_BACKUPS, // files
-		MaxSize:    conf.LOG_FILE_MAX_SIZE,        // megabytes
-		MaxAge:     conf.LOG_FILE_MAX_AGE,         // days
+	c.logger.Info(msg)
+}
+func (c *InternalLogger) Warn(msg string) {
+	if c.logger == nil {
+		return
 	}
+	c.logger.Warn(msg)
+}
+func (c *InternalLogger) Error(err error, msg string) {
+	log.Println(msg)
+	if c.logger == nil {
+		return
+	}
+	c.logger.Error(err, msg)
+}
+func (c *InternalLogger) Fatal(err error, msg string) {
+	if c.logger == nil {
+		return
+	}
+	c.logger.Fatal(err, msg)
+}
+func (c *InternalLogger) Panic(err error, msg string) {
+	if c.logger == nil {
+		return
+	}
+	c.logger.Panic(err, msg)
 }
 
 /*
 * Used to intercept and log logs from serf
  */
 type SerfLogWriter struct {
+	Skip bool
 }
 
 func (mw *SerfLogWriter) Write(line []byte) (n int, err error) {
+	if mw.Skip {
+		return len(line), nil
+	}
 
 	str := string(line)
+
+	//fmt.Println(str)
 
 	tmp := strings.Split(str, ":")
 
@@ -111,26 +111,70 @@ func (mw *SerfLogWriter) Write(line []byte) (n int, err error) {
 		str = ""
 		goMsg := false
 		for i := 0; i < len(tmp); i++ {
-			if strings.Contains(tmp[i], "agent") {
+			if strings.Contains(tmp[i], "agent") || strings.Contains(tmp[i], "serf") || strings.Contains(tmp[i], "memberlist") || strings.Contains(tmp[i], "event") || strings.Contains(tmp[i], "query") {
 				goMsg = true
 				levelString = tmp[i]
 			} else if goMsg {
-				str += tmp[i]
+				if str == "" {
+					str += strings.Trim(tmp[i], "\n")
+				} else {
+					str += ": " + strings.Trim(tmp[i], "\n")
+				}
+
 			}
 		}
 	}
 
 	if strings.Contains(levelString, "INFO") {
-		logInstance.Info().Str("FROM", "SERF-PROTOCOL").Msg(str)
+		loggerInstance.Info("[SERF]" + str)
 	} else if strings.Contains(levelString, "WARN") {
-		logInstance.Warn().Str("FROM", "SERF-PROTOCOL").Msg(str)
+		loggerInstance.Warn("[SERF]" + str)
 	} else if strings.Contains(levelString, "ERR") {
-		logInstance.Error().Str("FROM", "SERF-PROTOCOL").Msg(str)
+		loggerInstance.Error(nil, "[SERF]"+str)
 	} else if strings.Contains(levelString, "DEBUG") {
-		logInstance.Debug().Str("FROM", "SERF-PROTOCOL").Msg(str)
+		loggerInstance.Debug("[SERF]" + str)
 	} else {
-		logInstance.Error().Str("FROM", "SERF-PROTOCOL").Msg(str)
+		loggerInstance.Error(nil, "[SERF]"+str)
 	}
+	/*
+		if strings.Contains(levelString, "INFO") {
+			loggerInstance.Info().Str("LIB", "SERF").Msg(str)
+		} else if strings.Contains(levelString, "WARN") {
+			loggerInstance.Warn().Str("LIB", "SERF").Msg(str)
+		} else if strings.Contains(levelString, "ERR") {
+			loggerInstance.Error().Str("LIB", "SERF").Msg(str)
+		} else if strings.Contains(levelString, "DEBUG") {
+			loggerInstance.Debug().Str("LIB", "SERF").Msg(str)
+		} else {
+			loggerInstance.Error().Str("LIB", "SERF").Msg(str)
+		}
+	*/
 
 	return len(line), nil
+}
+
+// --- LOGGER FOR TESTING
+type LoggerForTesting struct {
+}
+
+func (l *LoggerForTesting) Trace(msg string) {
+	log.Println("TRACE: ", msg)
+}
+func (l *LoggerForTesting) Debug(msg string) {
+	log.Println("DEBUG: ", msg)
+}
+func (l *LoggerForTesting) Info(msg string) {
+	log.Println("INFO: ", msg)
+}
+func (l *LoggerForTesting) Warn(msg string) {
+	log.Println("WARN: ", msg)
+}
+func (l *LoggerForTesting) Error(err error, msg string) {
+	log.Println("ERROR: ", msg, err)
+}
+func (l *LoggerForTesting) Fatal(err error, msg string) {
+	log.Println("FATAL: ", msg, err)
+}
+func (l *LoggerForTesting) Panic(err error, msg string) {
+	log.Println("PANIC: ", msg, err)
 }

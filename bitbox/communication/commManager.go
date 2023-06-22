@@ -1,12 +1,30 @@
+// Copyright 2023 lucarondanini
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// 
+//     http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package communication
 
 import (
 	"errors"
+	"strconv"
 
-	"github.com/lrondanini/bit-box/bitbox/actions"
+	"github.com/lrondanini/bit-box/bitbox/cluster/actions"
+	"github.com/lrondanini/bit-box/bitbox/cluster/partitioner"
 	"github.com/lrondanini/bit-box/bitbox/cluster/server"
+	"github.com/lrondanini/bit-box/bitbox/cluster/stream"
 	"github.com/lrondanini/bit-box/bitbox/communication/tcp"
-	"github.com/lrondanini/bit-box/bitbox/partitioner"
+	"github.com/lrondanini/bit-box/bitbox/communication/types"
+	"github.com/lrondanini/bit-box/bitbox/storage"
 )
 
 func DeserializeBody(body string, toObject interface{}) error {
@@ -45,7 +63,7 @@ func (c *CommunicationManager) Shutdown() {
 
 func (c *CommunicationManager) SendPing(toNodeId string) (string, error) {
 
-	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.Ping, "ping")
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.Ping, "ping")
 
 	if err != nil {
 		return "", err
@@ -63,7 +81,7 @@ func (c *CommunicationManager) SendPing(toNodeId string) (string, error) {
 
 func (c *CommunicationManager) SendNodeBackOnlineNotification(toNodeId string) (int64, error) {
 
-	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.NodeBackOnlineNotification, "")
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.NodeBackOnlineNotification, "")
 
 	if err != nil {
 		return 0, err
@@ -75,15 +93,16 @@ func (c *CommunicationManager) SendNodeBackOnlineNotification(toNodeId string) (
 	return remoteTimestamp, nil
 }
 
-func (c *CommunicationManager) SendJoinClusterRequest(toNodeId string, nodeId string, nodeIp string, nodePort string) error {
+func (c *CommunicationManager) SendJoinClusterRequest(toNodeId string, nodeId string, nodeIp string, nodePort string, numbOfVNodes int) error {
 
 	body := make(map[string]string)
 
 	body["nodeId"] = nodeId
 	body["nodeIp"] = nodeIp
 	body["nodePort"] = nodePort
+	body["numbOfVNodes"] = strconv.Itoa(numbOfVNodes)
 
-	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.JoinClusterRequest, body)
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.JoinClusterRequest, body)
 
 	if err != nil {
 		return err
@@ -105,7 +124,7 @@ func (c *CommunicationManager) SendDecommissionNodeRequest(toNodeId string, node
 
 	body["nodeId"] = nodeId
 
-	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.DecommissionNodeRequest, body)
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.DecommissionNodeRequest, body)
 
 	if err != nil {
 		return err
@@ -122,7 +141,7 @@ func (c *CommunicationManager) SendDecommissionNodeRequest(toNodeId string, node
 
 func (c *CommunicationManager) SendRequestToBecomeMaster(toNodeId string) (bool, int64, error) {
 
-	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.RequestToBecomeMaster, "")
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.RequestToBecomeMaster, "")
 
 	if err != nil {
 		return false, 0, err
@@ -143,7 +162,7 @@ func (c *CommunicationManager) SendRequestToBecomeMaster(toNodeId string) (bool,
 // sent to a node trying to join or leave (decommision) the cluster in case the op cannot be completed
 func (c *CommunicationManager) SendAbortPartitionTableChangesToRequestor(toNodeId string, message string) error {
 
-	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.AbortPartitionTableChanges, message)
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.AbortPartitionTableChanges, message)
 
 	if err != nil {
 		return err
@@ -160,7 +179,7 @@ func (c *CommunicationManager) SendAbortPartitionTableChangesToRequestor(toNodeI
 }
 
 func (c *CommunicationManager) GetPartitionTableRequest(toNodeId string) (*partitioner.PartitionTable, error) {
-	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.GetPartitionTableRequest, "")
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.GetPartitionTableRequest, "")
 
 	if err != nil {
 		return nil, err
@@ -174,7 +193,7 @@ func (c *CommunicationManager) GetPartitionTableRequest(toNodeId string) (*parti
 
 func (c *CommunicationManager) SendUpdatePartitionTableRequest(toNodeId string, partitionTable *partitioner.PartitionTable) error {
 
-	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.UpdatePartitionTableRequest, partitionTable)
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.UpdatePartitionTableRequest, partitionTable)
 
 	if err != nil {
 		return err
@@ -194,7 +213,7 @@ func (c *CommunicationManager) SendUpdatePartitionTableRequest(toNodeId string, 
 
 func (c *CommunicationManager) SendReleaseMasterRequest(toNodeId string) error {
 
-	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.ReleaseMasterRequest, "")
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.ReleaseMasterRequest, "")
 
 	if err != nil {
 		return err
@@ -204,7 +223,7 @@ func (c *CommunicationManager) SendReleaseMasterRequest(toNodeId string) error {
 
 func (c *CommunicationManager) SendForceReleaseMasterRequest(toNodeId string) error {
 
-	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.ForceReleaseMasterRequest, "")
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.ForceReleaseMasterRequest, "")
 
 	if err != nil {
 		return err
@@ -213,7 +232,7 @@ func (c *CommunicationManager) SendForceReleaseMasterRequest(toNodeId string) er
 }
 
 func (c *CommunicationManager) SendCommitPartitionTableRequest(toNodeId string) error {
-	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.CommitPartitionTableRequest, "")
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.CommitPartitionTableRequest, "")
 
 	if err != nil {
 		return err
@@ -223,7 +242,7 @@ func (c *CommunicationManager) SendCommitPartitionTableRequest(toNodeId string) 
 
 func (c *CommunicationManager) SendClusterStatusRequest(toNodeId string) ([]server.Server, error) {
 
-	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, 0, 0, actions.ClusterStatusRequest, "")
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.ClusterStatusRequest, "")
 
 	if err != nil {
 		return nil, err
@@ -233,4 +252,196 @@ func (c *CommunicationManager) SendClusterStatusRequest(toNodeId string) ([]serv
 	DeserializeBody(reply.Body, &servers)
 
 	return servers, err
+}
+
+func (c *CommunicationManager) SendGetNodeStatsRequest(toNodeId string) (types.NodeStatsResponse, error) {
+
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.GetNodeStatsRequest, "")
+
+	if err != nil {
+		return types.NodeStatsResponse{}, err
+	}
+
+	var stats types.NodeStatsResponse
+	DeserializeBody(reply.Body, &stats)
+
+	return stats, err
+}
+
+func (c *CommunicationManager) SendStartDataStreamRequest(taskId string, toNodeId string, from uint64, to uint64) error {
+
+	req := types.DataSyncTaskRequest{
+		TaskId: taskId,
+		From:   from,
+		To:     to,
+	}
+
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.StartDataStreamRequest, req)
+
+	if err != nil {
+		return err
+	}
+
+	if reply.Error {
+		var errMsg string
+		DeserializeBody(reply.Body, &errMsg)
+		return errors.New(errMsg)
+	}
+
+	return nil
+}
+
+func (c *CommunicationManager) SendDataStreamChunk(toNodeId string, data stream.StreamMessage) error {
+
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.SendDataStreamChunk, data)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *CommunicationManager) SendDataStreamTaskCompleted(toNodeId string, taskId string) error {
+
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.SendDataStreamTaskCompleted, taskId)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *CommunicationManager) SendGetSyncTasks(toNodeId string) (types.DataSyncStatusResponse, error) {
+
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.SendGetSyncTasks, "")
+
+	if err != nil {
+		return types.DataSyncStatusResponse{}, err
+	}
+
+	dss := types.DataSyncStatusResponse{}
+	DeserializeBody(reply.Body, &dss)
+
+	return dss, nil
+}
+
+func (c *CommunicationManager) SendRetrySyncTask(toNodeId string, taskId string) error {
+
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.RetrySyncTask, taskId)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *CommunicationManager) SendSet(toNodeId string, collectionName string, key []byte, value []byte) error {
+
+	req := types.RWRequest{
+		Collection: collectionName,
+		Key:        key,
+		Value:      value,
+	}
+
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.Set, req)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *CommunicationManager) SendGet(toNodeId string, collectionName string, key []byte) ([]byte, error) {
+
+	req := types.RWRequest{
+		Collection: collectionName,
+		Key:        key,
+	}
+
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.Get, req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if reply.Error {
+		var errMsg string
+		DeserializeBody(reply.Body, &errMsg)
+		return nil, errors.New(errMsg)
+	}
+
+	var res []byte
+	err = DeserializeBody(reply.Body, &res)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, err
+}
+
+func (c *CommunicationManager) SendDel(toNodeId string, collectionName string, key []byte) error {
+
+	req := types.RWRequest{
+		Collection: collectionName,
+		Key:        key,
+	}
+
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.Del, req)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *CommunicationManager) SendScan(toNodeId string, collectionName string, startFromKey []byte, numberOfResults int) ([]types.RWRequest, error) {
+
+	req := types.ScanRequest{
+		Collection:      collectionName,
+		StartFromKey:    startFromKey,
+		NumberOfResults: numberOfResults,
+	}
+
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.Scan, req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	res := []types.RWRequest{}
+	err = DeserializeBody(reply.Body, &res)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (c *CommunicationManager) SendGetKeyLocation(toNodeId string, key []byte) (partitioner.HashLocation, error) {
+	var res partitioner.HashLocation
+
+	req := types.RWRequest{
+		Key: key,
+	}
+
+	reply, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.GetKeyLocation, req)
+
+	if err == nil {
+		err = DeserializeBody(reply.Body, &res)
+	}
+
+	return res, err
+}
+
+func (c *CommunicationManager) SendActionsLog(toNodeId string, data []storage.Entry) error {
+
+	_, err := c.tcpClientsManager.SendMessage(toNodeId, tcp.Request, actions.SendActionsLog, data)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

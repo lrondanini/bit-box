@@ -8,6 +8,13 @@
 
 *.out
 
+.DS_Store
 
-data/
+
+# bit-box server folders
+data
+logs
 .bit-box-cli-history
+bit-box-cli.yml
+confs-for-testing
+build

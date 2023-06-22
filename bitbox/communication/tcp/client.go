@@ -1,10 +1,24 @@
+// Copyright 2023 lucarondanini
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// 
+//     http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package tcp
 
 import (
 	"encoding/gob"
 	"net"
 
-	"github.com/lrondanini/bit-box/bitbox/actions"
+	"github.com/lrondanini/bit-box/bitbox/cluster/actions"
 )
 
 type TcpClientsManager struct {
@@ -17,7 +31,7 @@ func InitTcpClientsManager(nodeId string) *TcpClientsManager {
 	}
 }
 
-func (c *TcpClientsManager) SendMessage(toNodeId string, messageType MessageType, streamId uint8, streamPosition uint32, action actions.Action, body interface{}) (*Frame, error) {
+func (c *TcpClientsManager) SendMessage(toNodeId string, messageType MessageType, action actions.Action, body interface{}) (*Frame, error) {
 
 	serialiazedBody, e := EncodeBody(body)
 	if e != nil {
@@ -25,12 +39,10 @@ func (c *TcpClientsManager) SendMessage(toNodeId string, messageType MessageType
 	}
 
 	m := &Frame{
-		FromNodeId:     c.currentNodeId,
-		MessageType:    messageType,
-		StreamId:       streamId,
-		StreamPosition: streamPosition,
-		Action:         action,
-		Body:           serialiazedBody,
+		FromNodeId:  c.currentNodeId,
+		MessageType: messageType,
+		Action:      action,
+		Body:        serialiazedBody,
 	}
 
 	tcpAddr, tcpAddrErr := net.ResolveTCPAddr("tcp", toNodeId)

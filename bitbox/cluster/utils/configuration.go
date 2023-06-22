@@ -1,3 +1,17 @@
+// Copyright 2023 lucarondanini
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package utils
 
 import (
@@ -6,13 +20,9 @@ import (
 )
 
 type Configuration struct {
-	LOG_TO                   string
-	LOG_LEVEL                string
-	LOG_DIR                  string
-	LOG_FILE_NAME            string
-	LOG_FILE_MAX_SIZE        int
-	LOG_FILE_MAX_NUM_BACKUPS int
-	LOG_FILE_MAX_AGE         int
+	LOGGER              Logger
+	LOG_GOSSIP_PROTOCOL bool
+	LOG_STORAGE         bool
 
 	NODE_IP            string
 	NODE_PORT          string
@@ -21,6 +31,8 @@ type Configuration struct {
 	CLUSTER_NODE_IP            string
 	CLUSTER_NODE_PORT          string
 	CLUSTER_NODE_HEARTBIT_PORT string
+
+	NUMB_VNODES int
 
 	DATA_FOLDER string
 }
@@ -55,13 +67,11 @@ func VerifyAndSetConfiguration(conf *Configuration) {
 		errors = append(errors, "dataFolder is required")
 	}
 
-	if conf.LOG_TO == "" {
-		conf.LOG_TO = "console"
+	if conf.NUMB_VNODES == 0 {
+		conf.NUMB_VNODES = 8
 	}
 
-	if conf.LOG_LEVEL == "" {
-		conf.LOG_TO = "info"
-	}
+	InitLogger(conf.LOGGER)
 
 	if len(errors) > 0 {
 		for _, e := range errors {
@@ -71,4 +81,24 @@ func VerifyAndSetConfiguration(conf *Configuration) {
 	}
 
 	confInstance = *conf
+}
+
+func GetConfForTesting() *Configuration {
+	return &Configuration{
+		LOGGER:              &LoggerForTesting{},
+		LOG_GOSSIP_PROTOCOL: false,
+		LOG_STORAGE:         false,
+
+		NODE_IP:            "localhost",
+		NODE_PORT:          "9999",
+		NODE_HEARTBIT_PORT: "9998",
+
+		CLUSTER_NODE_IP:            "localhost",
+		CLUSTER_NODE_PORT:          "9997",
+		CLUSTER_NODE_HEARTBIT_PORT: "9996",
+
+		NUMB_VNODES: 4,
+
+		DATA_FOLDER: "/Users/lucarondanini/Desktop/BitBox/data/node-tests",
+	}
 }
