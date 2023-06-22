@@ -2,8 +2,24 @@
 <img src="graffitiLogo.png" alt="bit-box" width="600"/>
 
 
-Bit-box is an embeddable distributed key-value store based on Dynamo/Bigtable architectures designed to uniformally distribute tasks over a cluster of nodes.
+Bit-box is an embeddable distributed key-value store based on Dynamo/Bigtable architectures.
 
+Born as part of another project, its main goal is to uniformally distribute tasks over a cluster of nodes.
+
+### Features
+
+- Embeddable First: although you'll find a standalone implementation here, bit-box was designed to be easilly embedded into your code   
+- Distributed Footprint: no master node, data is uniformally distributed
+- Elastic Scalability: adding/removing nodes is extremelly simple with no down time. 
+- Fault Tolerance: data is automatically replicated among the nodes. If a node goes down, its load/tasks will be automatically managed by another node
+- Event Streaming: you can subscribe to specific events in the cluster
+- Scheduler: crontab like features to manage your task
+- Atomicity: bit-box guarantees that a task will be performed only once 
+- Monitoring: easy to maintain and monitor using our cli
+
+### Can I use bit-box as a database?
+
+Yes but bit-box does not implements any query language and it does not offer indexing features (beside the one on the primary key, of course). 
 
 ## Getting Started
 
