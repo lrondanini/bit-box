@@ -7,9 +7,8 @@
 
 Bit-box is an embeddable distributed key-value store based on Dynamo/Bigtable architectures designed to uniformally distribute tasks over a cluster of nodes.
 
-see [vndoes](#v-nodes)
 
-## Getting Started
+# Getting Started
 
 ```
 go get github.com/lrondanini/bit-box/bitbox
@@ -33,7 +32,7 @@ go bitBox.Start(false, onReadyChan)
 <-onReadyChan
 ```
 
-### Configuration
+# Configuration
 
 ```
 type Configuration struct {
@@ -53,11 +52,32 @@ type Configuration struct {
 }
 ```
 
-You can use NUMB_VNODES to manage the load of a specific node. 
+Bit-box needs 2 ports. NODE_PORT is used for inter-node communication. This port is also used by any external client. NODE_HEARTBIT_PORT is used by the raft protocol.
 
-## Architecture
+DATA_FOLDER is where bit-box will store its data.
 
-### <a name="v-nodes"></a> Vnodes
+You can use NUMB_VNODES to manage the load of a specific node. See architecture notes for more details [here](#v-nodes).
+
+CLUSTER_NODE_IP, CLUSTER_NODE_PORT and CLUSTER_NODE_HEARTBIT_PORT are used on bootstrap to connect to the cluster.
+
+You can turn on/off logs for the storage and the raft protocol using LOG_GOSSIP_PROTOCOL and LOG_STORAGE
+
+LOGGER must implement the following interface:
+
+```
+func (c *Logger) Trace(msg string) {...}
+func (c *Logger) Debug(msg string) {...}
+func (c *Logger) Info(msg string) {...}
+func (c *Logger) Warn(msg string) {...}
+func (c *Logger) Error(err error, msg string) {...}
+func (c *Logger) Fatal(err error, msg string) {...}
+func (c *Logger) Panic(err error, msg string) {...}
+```
+
+
+# Architecture
+
+## <a name="v-nodes"></a> Vnodes
 
 <!-- 
 <-onReadyChan
