@@ -35,7 +35,7 @@ bitbox, err := bitbox.Init(conf)
 bitBox.Start(false, nil)
 ```
 
-To start a node as go routine:
+To start a node as a routine:
 
 ```
 var conf utils.Configuration
@@ -45,47 +45,8 @@ go bitBox.Start(false, onReadyChan)
 <-onReadyChan
 ```
 
-## Configuration
+For configuration details click [here](#configuration)
 
-```
-type Configuration struct {
-	NODE_IP            string
-	NODE_PORT          string
-	NODE_HEARTBIT_PORT string
-	NUMB_VNODES        int
-	DATA_FOLDER        string
-
-	CLUSTER_NODE_IP            string
-	CLUSTER_NODE_PORT          string
-	CLUSTER_NODE_HEARTBIT_PORT string
-
-	LOGGER              Logger
-	LOG_GOSSIP_PROTOCOL bool
-	LOG_STORAGE         bool
-}
-```
-
-Bit-box needs 2 ports. NODE_PORT is used for inter-node communication. This port is also used by any external client. NODE_HEARTBIT_PORT is used by the raft protocol.
-
-DATA_FOLDER is where bit-box will store its data.
-
-You can use NUMB_VNODES to manage the load of a specific node. See architecture notes for more details [here](#v-nodes).
-
-CLUSTER_NODE_IP, CLUSTER_NODE_PORT and CLUSTER_NODE_HEARTBIT_PORT are used on bootstrap to connect to the cluster.
-
-You can turn on/off logs for the storage and the raft protocol using LOG_GOSSIP_PROTOCOL and LOG_STORAGE
-
-LOGGER must implement the following interface:
-
-```
-func (c *Logger) Trace(msg string) {...}
-func (c *Logger) Debug(msg string) {...}
-func (c *Logger) Info(msg string) {...}
-func (c *Logger) Warn(msg string) {...}
-func (c *Logger) Error(err error, msg string) {...}
-func (c *Logger) Fatal(err error, msg string) {...}
-func (c *Logger) Panic(err error, msg string) {...}
-```
 
 ## Usage
 
@@ -126,6 +87,49 @@ bitbox.Delete(collectionName string, key interface{}) error
 ### Subscribe to events
 
 ### Iteration
+
+
+## Configuration <a name="configuration"></a>
+
+```
+type Configuration struct {
+	NODE_IP            string
+	NODE_PORT          string
+	NODE_HEARTBIT_PORT string
+	NUMB_VNODES        int
+	DATA_FOLDER        string
+
+	CLUSTER_NODE_IP            string
+	CLUSTER_NODE_PORT          string
+	CLUSTER_NODE_HEARTBIT_PORT string
+
+	LOGGER              Logger
+	LOG_GOSSIP_PROTOCOL bool
+	LOG_STORAGE         bool
+}
+```
+
+Bit-box needs 2 ports. NODE_PORT is used for inter-node communication. This port is also used by any external client. NODE_HEARTBIT_PORT is used by the raft protocol.
+
+DATA_FOLDER is where bit-box will store its data.
+
+You can use NUMB_VNODES to manage the load of a specific node. See architecture notes for more details [here](#v-nodes).
+
+CLUSTER_NODE_IP, CLUSTER_NODE_PORT and CLUSTER_NODE_HEARTBIT_PORT are used on bootstrap to connect to the cluster.
+
+You can turn on/off logs for the storage and the raft protocol using LOG_GOSSIP_PROTOCOL and LOG_STORAGE
+
+LOGGER must implement the following interface:
+
+```
+func (c *Logger) Trace(msg string) {...}
+func (c *Logger) Debug(msg string) {...}
+func (c *Logger) Info(msg string) {...}
+func (c *Logger) Warn(msg string) {...}
+func (c *Logger) Error(err error, msg string) {...}
+func (c *Logger) Fatal(err error, msg string) {...}
+func (c *Logger) Panic(err error, msg string) {...}
+```
 
 # Architecture
 
