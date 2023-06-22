@@ -8,7 +8,7 @@
 Bit-box is an embeddable distributed key-value store based on Dynamo/Bigtable architectures designed to uniformally distribute tasks over a cluster of nodes.
 
 
-# Getting Started
+## Getting Started
 
 ```
 go get github.com/lrondanini/bit-box/bitbox
@@ -32,7 +32,7 @@ go bitBox.Start(false, onReadyChan)
 <-onReadyChan
 ```
 
-# Configuration
+## Configuration
 
 ```
 type Configuration struct {
@@ -72,6 +72,36 @@ func (c *Logger) Warn(msg string) {...}
 func (c *Logger) Error(err error, msg string) {...}
 func (c *Logger) Fatal(err error, msg string) {...}
 func (c *Logger) Panic(err error, msg string) {...}
+```
+
+## Usage
+
+### Collections
+
+Bit-box store data in collections. A collection is automatically created on the first insert. Data in a collection are sorted according to the type of the key. For example, a key of type string follows a lexicographic order while a
+key of type int follows ASC order. 
+### Setting and getting key/values
+
+To store a value:
+
+```
+bitbox.Set(collectionName string, key interface{}, value interface{}) error
+```
+
+To retrieve a value:
+
+```
+bitbox.Get(collectionName string, key interface{}, value interface{}) error
+```
+
+Note that you need to pass **value** as an pointer address so that bit-box can concert from byte array (stored in the db) to your specifc type. For example:
+
+```
+bitbox.Set("tasks", "one", "first-task") 
+
+value := ""
+_ := bitbox.Get("tasks", "one", &value)
+fmt.Println(value) //will print first-task
 ```
 
 
