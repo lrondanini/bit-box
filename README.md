@@ -9,7 +9,7 @@ Bit-box is an embeddable distributed key-value store based on Dynamo/Bigtable ar
 
 see [vndoes](###Vnodes)
 
-##Getting Started
+## Getting Started
 
 ```
 go get github.com/lrondanini/bit-box/bitbox
@@ -33,7 +33,7 @@ go bitBox.Start(forceRejoin, onReadyChan)
 <-onReadyChan
 ```
 
-###Configuration
+### Configuration
 
 ```
 type Configuration struct {
@@ -57,9 +57,9 @@ type Configuration struct {
 
 You can use NUMB_VNODES to manage the load of a specific node. 
 
-##Architecture
+## Architecture
 
-###Vnodes
+### Vnodes
 
 <!-- 
 <-onReadyChan
