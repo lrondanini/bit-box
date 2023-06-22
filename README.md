@@ -53,7 +53,7 @@ For configuration details click [here](#configuration)
 ### Collections
 
 Bit-box store data in collections. A collection is automatically created on the first insert. Data in a collection are sorted according to the type of the key. For example, a key of type string follows a lexicographic order while a
-key of type int follows ASC order. 
+key of type int is ASC ordered. 
 ### Setting, getting and deleting key/values
 
 To store a value:
@@ -86,10 +86,58 @@ bitbox.Delete(collectionName string, key interface{}) error
 
 ### Subscribe to events
 
-### Iteration
+You can listen for events on a specific collection using:
 
+```
+eventsChannel := bitBox.SubscribeTo("collection-name")
+for {
+  event := <-eventsChannel
+
+}
+```
+
+the event:
+
+```
+type Event struct {
+	Type       EventType
+	Collection string
+	Key        []byte
+}
+```
+
+EventType is an enum: Insert, Update, Delete
+
+
+### Scanning
+
+You can scan the content of a collection but only for the local node. To scan other nodes you'll need to use bit-box's TCP protocol and connect to the remote node.
+
+To get an iterator you can use one of the following:
+
+```
+bitbox.GetLocalIterator(collectionName string) (*storage.Iterator, error) 
+
+bitbox.GetLocalIteratorFrom(collectionName string, from interface{}) (*storage.Iterator, error)
+
+bitbox.GetLocalFilteredIterator(collectionName string, from interface{}, to interface{}) (*storage.Iterator, error)
+```
+
+Using an iterator is extremelly simple:
+
+```
+it, _ := bitbox.GetLocalIterator(collectionName) 
+for it.HasMore() {
+  var value string
+  var key int
+  err := it.Next(&key, &value)
+  fmt.Println(k, "=", v)
+}
+```
 
 ## Configuration <a name="configuration"></a>
+
+Bit-box configuration is extremelly simple:
 
 ```
 type Configuration struct {
