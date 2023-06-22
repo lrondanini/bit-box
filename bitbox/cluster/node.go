@@ -1,11 +1,11 @@
 // Copyright 2023 lucarondanini
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -39,6 +39,7 @@ type Node struct {
 	nodeStats                    *NodeStats
 	streamSync                   sync.Mutex
 	streamSyncDeletesCollections *storage.Collection //temp storage to avoid to insert from stream an entry taht as deleted (while waiting for sync)
+	eventsSubscribers            map[string][]chan Event
 }
 
 func GenerateNodeId(nodeIp string, nodePort string) string {
@@ -49,11 +50,12 @@ func InitNode(conf utils.Configuration) (*Node, error) {
 	utils.VerifyAndSetConfiguration(&conf)
 
 	var node Node = Node{
-		id:             GenerateNodeId(conf.NODE_IP, conf.NODE_PORT),
-		NodeIp:         conf.NODE_IP,
-		NodePort:       conf.NODE_PORT,
-		logger:         utils.GetLogger(),
-		storageManager: storage.InitStorageManager(),
+		id:                GenerateNodeId(conf.NODE_IP, conf.NODE_PORT),
+		NodeIp:            conf.NODE_IP,
+		NodePort:          conf.NODE_PORT,
+		logger:            utils.GetLogger(),
+		storageManager:    storage.InitStorageManager(),
+		eventsSubscribers: make(map[string][]chan Event),
 	}
 
 	cm, err := InitClusterManager(&node)

@@ -1,11 +1,11 @@
 // Copyright 2023 lucarondanini
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,6 +16,7 @@ package cluster
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -25,6 +26,37 @@ import (
 	"github.com/lrondanini/bit-box/bitbox/storage"
 	"golang.org/x/exp/slices"
 )
+
+type Event struct {
+	Type       EventType
+	Collection string
+	Key        []byte
+}
+
+func (e *Event) ToString() string {
+	return fmt.Sprintf("Type: %s, Collection: %s, Key: %s", e.Type.String(), e.Collection, string(e.Key))
+}
+
+type EventType uint8
+
+const (
+	Insert EventType = iota
+	Update
+	Delete
+)
+
+func (s EventType) String() string {
+	switch s {
+	case Insert:
+		return "Insert"
+	case Update:
+		return "Update"
+	case Delete:
+		return "Delete"
+	default:
+		panic(fmt.Sprintf("unknown EventType: %d", s))
+	}
+}
 
 func (n *Node) GetKeyLocationInCluster(key []byte) partitioner.HashLocation {
 	hash := partitioner.GetHash(key)
@@ -171,12 +203,19 @@ func (n *Node) performUpsert(collectionName string, hash uint64, key []byte, val
 			if err == nil {
 				c.SetRaw(key, vBytes)
 
-				ev := Event{
+				ev := statEvent{
 					EventType:      UpsertEvent,
 					CollectionName: collectionName,
 					IsNew:          !exists,
 				}
 				n.nodeStats.Log(ev)
+
+				if exists {
+					n.fireEvent(collectionName, Update, key)
+				} else {
+					n.fireEvent(collectionName, Insert, key)
+				}
+
 			}
 		}
 
@@ -202,15 +241,20 @@ func (n *Node) upsertFromClusterStream(collectionName string, data []stream.Stre
 			n.streamSyncDeletesCollections.Delete(sBytes)
 		}
 		n.streamSync.Unlock()
+
+		if !res {
+			n.fireEvent(collectionName, Update, key)
+		}
 		return res
 	}, func() {
 		//update stats
-		ev := Event{
+		ev := statEvent{
 			EventType:      UpsertEvent,
 			CollectionName: collectionName,
 			IsNew:          true,
 		}
 		n.nodeStats.Log(ev)
+
 	})
 
 	//verify that no new entry was added to streamSyncDeletesCollections
@@ -242,12 +286,13 @@ func (n *Node) deleteForClusterSync(collectionName string, keys [][]byte) error 
 		return e
 	}
 
-	return c.DeleteKeys(keys, func() {
-		ev := Event{
+	return c.DeleteKeys(keys, func(k []byte) {
+		ev := statEvent{
 			EventType:      DeleteEvent,
 			CollectionName: collectionName,
 		}
 		n.nodeStats.Log(ev)
+		n.fireEvent(collectionName, Delete, k)
 	})
 }
 
@@ -326,7 +371,7 @@ func (n *Node) GetRaw(fromNodeId string, collectionName string, key []byte) ([]b
 
 		vBytes = v.Value //.([]byte)
 
-		ev := Event{
+		ev := statEvent{
 			EventType:      ReadEvent,
 			CollectionName: collectionName,
 		}
@@ -373,13 +418,17 @@ func (n *Node) performDelete(fromNodeId string, hash uint64, collectionName stri
 				n.skipInsertFromStreamForEntry(collectionName, key)
 			}
 		} else {
-			ev := Event{
+			ev := statEvent{
 				EventType:      DeleteEvent,
 				CollectionName: collectionName,
 			}
 			n.nodeStats.Log(ev)
 
 			err = c.DeleteRaw(key)
+
+			if err == nil {
+				n.fireEvent(collectionName, Delete, key)
+			}
 		}
 	}
 
@@ -588,7 +637,7 @@ func (n *Node) processActionsLog(log []storage.Entry) {
 			c, err := n.storageManager.GetCollection(entry.Collection)
 
 			if err == nil {
-				ev := Event{
+				ev := statEvent{
 					EventType:      DeleteEvent,
 					CollectionName: entry.Collection,
 				}
@@ -597,5 +646,26 @@ func (n *Node) processActionsLog(log []storage.Entry) {
 				c.DeleteRaw(entry.Key)
 			}
 		}
+	}
+}
+
+func (n *Node) SubscribeTo(collectionName string) chan Event {
+	evChannel := make(chan Event)
+	tmp := n.eventsSubscribers[collectionName]
+	tmp = append(tmp, evChannel)
+	n.eventsSubscribers[collectionName] = tmp
+	return evChannel
+}
+
+func (n *Node) fireEvent(collectionName string, eventType EventType, key []byte) {
+	ev := Event{
+		Type:       eventType,
+		Collection: collectionName,
+		Key:        key,
+	}
+
+	tmp := n.eventsSubscribers[collectionName]
+	for _, ch := range tmp {
+		ch <- ev
 	}
 }

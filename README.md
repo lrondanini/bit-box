@@ -5,6 +5,68 @@
 <img src="graffitiLogo.png" alt="bit-box" width="600"/>
 
 
-Bit-box is a distributed key-value store based on Dynamo/Bigtable architectures originally designed to uniformally distribute tasks over a cluster of nodes.
+Bit-box is an embeddable distributed key-value store based on Dynamo/Bigtable architectures designed to uniformally distribute tasks over a cluster of nodes.
 
+see [vndoes](###Vnodes)
 
+##Getting Started
+
+```
+go get github.com/lrondanini/bit-box/bitbox
+```
+
+To start the node:
+
+```
+var conf utils.Configuration
+bitbox, err := bitbox.Init(conf)
+bitBox.Start(false, nil)
+```
+
+To start the node as go routine:
+
+```
+var conf utils.Configuration
+bitbox, err := bitbox.Init(conf)
+onReadyChan := make(chan bool)
+go bitBox.Start(forceRejoin, onReadyChan)
+<-onReadyChan
+```
+
+###Configuration
+
+```
+type Configuration struct {
+	NODE_IP            string
+	NODE_PORT          string
+	NODE_HEARTBIT_PORT string
+  NUMB_VNODES        int
+	DATA_FOLDER        string
+
+	CLUSTER_NODE_IP            string
+	CLUSTER_NODE_PORT          string
+	CLUSTER_NODE_HEARTBIT_PORT string
+
+	
+
+  LOGGER              Logger
+	LOG_GOSSIP_PROTOCOL bool
+	LOG_STORAGE         bool
+}
+```
+
+You can use NUMB_VNODES to manage the load of a specific node. 
+
+##Architecture
+
+###Vnodes
+
+<!-- 
+<-onReadyChan
+ev := bitBox.SubscribeTo("dogs")
+fmt.Println("Subscribed to dogs")
+for {
+  e := <-ev
+  fmt.Println(e.ToString())
+}
+-->

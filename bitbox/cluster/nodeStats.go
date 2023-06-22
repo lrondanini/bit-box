@@ -1,11 +1,11 @@
 // Copyright 2023 lucarondanini
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -34,19 +34,19 @@ type NodeStats struct {
 	StatsPerCollection map[string]CollectionStats
 	statsDb            *storage.Collection
 	logger             *utils.InternalLogger
-	statsEvents        chan Event
+	statsEvents        chan statEvent
 }
 
-type Event struct {
-	EventType      EventType
+type statEvent struct {
+	EventType      statEventEventType
 	CollectionName string
 	IsNew          bool
 }
 
-type EventType uint8
+type statEventEventType uint8
 
 const (
-	UpsertEvent EventType = iota
+	UpsertEvent statEventEventType = iota
 	DeleteEvent
 	ReadEvent
 )
@@ -85,7 +85,7 @@ func InitNodeStats() (*NodeStats, error) {
 		StatsPerCollection: statsPerCollection,
 		statsDb:            statsDb,
 		logger:             logger,
-		statsEvents:        make(chan Event, 1000),
+		statsEvents:        make(chan statEvent, 1000),
 	}
 
 	go ns.EventsMonitor()
@@ -108,7 +108,7 @@ func (ns *NodeStats) Shutdown() {
 	close(ns.statsEvents)
 }
 
-func (ns *NodeStats) Log(e Event) {
+func (ns *NodeStats) Log(e statEvent) {
 	ns.statsEvents <- e
 }
 
