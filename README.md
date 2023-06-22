@@ -52,8 +52,8 @@ For configuration details click [here](#configuration)
 
 ### Collections
 
-Bit-box store data in collections. A collection is automatically created on the first insert. Data in a collection are sorted according to the type of the key. For example, a key of type string follows a lexicographic order while a
-key of type int is ASC ordered. 
+Bit-box stores data in collections. A collection is automatically created on the first insert. Data in a collection are sorted according to the type of the key. For example, a key of type string follows a lexicographic order while a
+key of type int is ASC ordered. Keys os type struct will be converted to its []byte form and ordered lexicographically.
 ### Setting, getting and deleting key/values
 
 To store a value:
@@ -68,7 +68,7 @@ To retrieve a value:
 bitbox.Get(collectionName string, key interface{}, value interface{}) error
 ```
 
-Note that you need to pass **value** as an pointer address so that bit-box can concert from byte array (stored in the db) to your specifc type. For example:
+_Note that you need to pass **value** as an pointer address so that bit-box can concert from byte array (stored in the db) to your specifc type. For example:
 
 ```
 bitbox.Set("tasks", "one", "first-task") 
