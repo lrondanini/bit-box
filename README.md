@@ -7,7 +7,7 @@
 
 Bit-box is an embeddable distributed key-value store based on Dynamo/Bigtable architectures designed to uniformally distribute tasks over a cluster of nodes.
 
-see [vndoes](###Vnodes)
+see [vndoes](### Vnodes)
 
 ## Getting Started
 
