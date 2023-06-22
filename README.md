@@ -15,7 +15,7 @@ see [vndoes](###Vnodes)
 go get github.com/lrondanini/bit-box/bitbox
 ```
 
-To start the node:
+To start a node:
 
 ```
 var conf utils.Configuration
@@ -23,13 +23,13 @@ bitbox, err := bitbox.Init(conf)
 bitBox.Start(false, nil)
 ```
 
-To start the node as go routine:
+To start a node as go routine:
 
 ```
 var conf utils.Configuration
 bitbox, err := bitbox.Init(conf)
 onReadyChan := make(chan bool)
-go bitBox.Start(forceRejoin, onReadyChan)
+go bitBox.Start(false, onReadyChan)
 <-onReadyChan
 ```
 
@@ -40,16 +40,14 @@ type Configuration struct {
 	NODE_IP            string
 	NODE_PORT          string
 	NODE_HEARTBIT_PORT string
-  NUMB_VNODES        int
+	NUMB_VNODES        int
 	DATA_FOLDER        string
 
 	CLUSTER_NODE_IP            string
 	CLUSTER_NODE_PORT          string
 	CLUSTER_NODE_HEARTBIT_PORT string
 
-	
-
-  LOGGER              Logger
+	LOGGER              Logger
 	LOG_GOSSIP_PROTOCOL bool
 	LOG_STORAGE         bool
 }
