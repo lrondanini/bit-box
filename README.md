@@ -68,7 +68,7 @@ To retrieve a value:
 bitbox.Get(collectionName string, key interface{}, value interface{}) error
 ```
 
-_Note that you need to pass **value** as an pointer address so that bit-box can concert from byte array (stored in the db) to your specifc type. For example:
+_Note_ that you need to pass **value** as an pointer address so that bit-box can concert from byte array (stored in the db) to your specifc type. For example:
 
 ```
 bitbox.Set("tasks", "one", "first-task") 
