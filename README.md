@@ -57,7 +57,7 @@ You can use NUMB_VNODES to manage the load of a specific node.
 
 ## Architecture
 
-### Vnodes (#v-nodes)
+### <a name="v-nodes"></a> Vnodes
 
 <!-- 
 <-onReadyChan
