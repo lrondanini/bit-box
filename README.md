@@ -68,7 +68,7 @@ To retrieve a value:
 bitbox.Get(collectionName string, key interface{}, value interface{}) error
 ```
 
-**_Note_** that you need to pass **value** as an pointer address so that bit-box can concert from byte array (stored in the db) to your specifc type. For example:
+**_IMPORTANT_** you need to pass **value** as an pointer address so that bit-box can concert from byte array (stored in the db) to your specifc type. For example:
 
 ```
 bitbox.Set("tasks", "one", "first-task") 
@@ -111,7 +111,7 @@ EventType is an enum: Insert, Update, Delete
 
 ### Scanning
 
-You can scan the content of a collection but only for the local node. To scan other nodes you'll need to use bit-box's TCP protocol and connect to the remote node.
+You can scan the content of a collection but only from the local node. To scan other nodes you'll need to use bit-box's TCP protocol and connect to the remote node.
 
 To get an iterator you can use one of the following:
 
@@ -137,7 +137,7 @@ for it.HasMore() {
 
 ## Configuration <a name="configuration"></a>
 
-Bit-box configuration is extremelly simple:
+Bit-box configuration is mostly self explanatory:
 
 ```
 type Configuration struct {
@@ -157,15 +157,19 @@ type Configuration struct {
 }
 ```
 
-Bit-box needs 2 ports. NODE_PORT is used for inter-node communication. This port is also used by any external client. NODE_HEARTBIT_PORT is used by the raft protocol.
+Bit-box needs 2 ports:
 
-DATA_FOLDER is where bit-box will store its data.
+- NODE_PORT is used for inter-node communication. This port is also used by any external client. 
+- NODE_HEARTBIT_PORT is used by the raft protocol.
 
-You can use NUMB_VNODES to manage the load of a specific node. See architecture notes for more details [here](#v-nodes).
+DATA_FOLDER is where bit-box will store data on your HD.
+
+NUMB_VNODES defines the number of vnodes assigned to the node. Reasonable values go from 8 to 256 but a lot depends on your needs. We recommend to start with a value of 8. Its important to notice 
+that you can use NUMB_VNODES to manage the load of a specific node. See architecture notes for more details [here](#v-nodes).
 
 CLUSTER_NODE_IP, CLUSTER_NODE_PORT and CLUSTER_NODE_HEARTBIT_PORT are used on bootstrap to connect to the cluster.
 
-You can turn on/off logs for the storage and the raft protocol using LOG_GOSSIP_PROTOCOL and LOG_STORAGE
+You can turn on/off logs for the storage and the raft protocol using LOG_GOSSIP_PROTOCOL and LOG_STORAGE.
 
 LOGGER must implement the following interface:
 
@@ -183,12 +187,3 @@ func (c *Logger) Panic(err error, msg string) {...}
 
 ## <a name="v-nodes"></a> Vnodes
 
-<!-- 
-<-onReadyChan
-ev := bitBox.SubscribeTo("dogs")
-fmt.Println("Subscribed to dogs")
-for {
-  e := <-ev
-  fmt.Println(e.ToString())
-}
--->
