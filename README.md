@@ -13,7 +13,7 @@ Born as part of another project, its main goal is to uniformally distribute task
 - Elastic Scalability: adding/removing nodes is extremelly simple with no down time. 
 - Fault Tolerance: data is automatically replicated among the nodes. If a node goes down, its load/tasks will be automatically managed by another node
 - Event Streaming: you can subscribe to specific events in the cluster
-- Scheduler: crontab like features to manage your task
+- Scheduler: crontab like features to manage your tasks
 - Atomicity: bit-box guarantees that a task will be performed only once 
 - Monitoring: easy to maintain and monitor using our cli
 
@@ -157,7 +157,7 @@ type Configuration struct {
 }
 ```
 
-Bit-box needs 2 ports:
+Bit-box listens on 2 ports:
 
 - NODE_PORT is used for inter-node communication. This port is also used by any external client. 
 - NODE_HEARTBIT_PORT is used by the raft protocol.
@@ -185,5 +185,22 @@ func (c *Logger) Panic(err error, msg string) {...}
 
 # Architecture
 
-## <a name="v-nodes"></a> Vnodes
+The main goal driving bit-box development was to uniformally distribute tasks among a cluster of nodes. Data is distributed among nodes using a Dynamo's approach similar to db like Cassandra and ScyllaDB.
+
+## Dataset Partitioning: Consisten Hashing
+
+Bit-box partitions the data over all the nodes in the cluster using consistent hashing. In particular bit-box uses [Murmur3](https://en.wikipedia.org/wiki/MurmurHash) hash function. The output range of the ash function is treated as a fixes circular space ("token ring"). Each node in the system is assigned a random value within this space which represents its “position” on the ring. Each data item identified by a key is assigned to a node by hashing the data item’s key.
+
+## <a name="v-nodes"></a> Partition Table and Vnodes
+
+As advocated by the original Dynamo paper, to avoid nodes imbalance bit-box uses "virtual nodes" (vnodes). Virtual nodes assign multiple tokens in the token ring to each physical node. By allowing a single physical node to take multiple positions in the ring, we can make small clusters look larger and therefore even with a single physical node addition we can make it look like we added many more nodes, effectively taking many smaller pieces of data from more ring neighbors when we add even a single node.
+
+The mapping of tokens to nodes gives rise to the Partition Table where bit-box keeps track of what ring positions map to which physical node.
+
+When a new node is added it accepts approximately equal amounts of data from other nodes in the ring, resulting in equal distribution of data across the cluster.
+
+When a node is decommissioned, it loses data roughly equally to other members of the ring, again keeping equal distribution of data across the cluster.
+
+Another advantage of this approach is that specifying the number of vnodes a node can manage you can distribute the load accordingly to each node's hardware.  
+
 
