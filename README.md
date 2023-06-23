@@ -189,7 +189,7 @@ The main goal driving bit-box development was to uniformally distribute tasks am
 
 ## Dataset Partitioning: Consisten Hashing
 
-Bit-box partitions the data over all the nodes in the cluster using consistent hashing. In particular bit-box uses [Murmur3](https://en.wikipedia.org/wiki/MurmurHash) hash function. The output range of the ash function is treated as a fixes circular space ("token ring"). Each node in the system is assigned a random value within this space which represents its “position” on the ring. Each data item identified by a key is assigned to a node by hashing the data item’s key.
+Bit-box partitions the data over all the nodes in the cluster using consistent hashing. In particular bit-box uses [Murmur3](https://en.wikipedia.org/wiki/MurmurHash) hash function. The output range of the hash function is treated as a fixes circular space ("token ring"). Each node in the system is assigned a random value within this space which represents its “position” on the ring. Each data item identified by a key is assigned to a node by hashing the data item’s key.
 
 ## <a name="v-nodes"></a> Partition Table and Vnodes
 
@@ -203,4 +203,15 @@ When a node is decommissioned, it loses data roughly equally to other members of
 
 Another advantage of this approach is that specifying the number of vnodes a node can manage you can distribute the load accordingly to each node's hardware.  
 
+## Single-Master Replication and Raft Algoritm
 
+To achieve high availability and durability, bit-box replicates its data on multiple nodes. Replicas are always chosen such that they are distinct physical nodes which is achieved by skipping virtual nodes if needed. 
+
+Every vnode is then replicated over N nodes but unlike similar databases (Cassandra, ScyllaDb, Kafka...) these nodes are not equal. Every time the Partion Table is updated, to every vnode is assigned 1 master node and N replica nodes.
+
+The master node is in charge of R/Ws for the vnode and to keep the replicas up to date. It is also in charge of executing the tasks assigned to the vnode. If a master node fails, a replica is automatically elected to master using a slightly
+modified version of the very popular [Raft Algorithm](https://en.wikipedia.org/wiki/Raft_(algorithm)).
+
+## Cluster orchestration
+
+For cluster membership, failure detection, and orchestration bit-box uses serf by HarshiCorp: [https://www.serf.io/intro/index.html](https://www.serf.io/intro/index.html) 
