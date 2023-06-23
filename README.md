@@ -189,7 +189,7 @@ The main goal driving bit-box development was to uniformally distribute tasks am
 
 ## Dataset Partitioning: Consisten Hashing
 
-Bit-box partitions the data over all the nodes in the cluster using consistent hashing. In particular bit-box uses [Murmur3](https://en.wikipedia.org/wiki/MurmurHash) hash function. The output range of the hash function is treated as a fixes circular space ("token ring"). Each node in the system is assigned a random value within this space which represents its “position” on the ring. Each data item identified by a key is assigned to a node by hashing the data item’s key.
+Bit-box partitions the data over all the nodes in the cluster using consistent hashing. In particular bit-box uses [Murmur3](https://en.wikipedia.org/wiki/MurmurHash) as hash function. The output range of the hash function is treated as a fixes circular space ("token ring"). Each node in the system is assigned a random value within this space which represents its “position” on the ring. Each data item identified by a key is assigned to a node by hashing the data item’s key.
 
 ## <a name="v-nodes"></a> Partition Table and Vnodes
 
